@@ -1,11 +1,13 @@
 import os
 import requests
+import time
 from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
+from selenium.webdriver.chrome.options import Options
 
 load_dotenv()
 
@@ -14,11 +16,11 @@ PASSWORD = os.getenv("PASSWORD")
 URL = os.getenv("URL")
 URL2 = os.getenv("URL2")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID"))
 
 def main():
-    driver = webdriver.Chrome()  # Selenium Manager will locate ChromeDriver automatically
-    wait = WebDriverWait(driver, 10)
+    driver = create_driver()  # Selenium Manager will locate ChromeDriver automatically
+    wait = WebDriverWait(driver, 20)
 
     try:
         #driver.get("https://ais.usvisa-info.com/en-kz/niv/users/sign_in")
@@ -26,7 +28,7 @@ def main():
         #input("Browser is open. Inspect the modal, then press Enter to continue...")
 
         # wait for the OK modal to appear
-        ok_button = WebDriverWait(driver, 20).until(
+        ok_button = wait.until(
             EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
         )
         ok_button.click()   
@@ -45,43 +47,92 @@ def main():
         )
         policy_wrapper.click()
 
-        # Optional: wait a moment after clicking (human-like pause)
-        import time
-        time.sleep(2)
+        # # Optional: wait a moment after clicking (human-like pause)
+        # import time
+        # time.sleep(2)
 
         # Click Sign In button
         sign_in_button = driver.find_element(By.NAME, "commit")
         sign_in_button.click()
 
         # wait for dropdown and select Astana
-        dropdown = WebDriverWait(driver, 20).until(
+        dropdown = wait.until(
             EC.presence_of_element_located((By.ID, "appointments_consulate_appointment_facility_id"))
         )
         select = Select(dropdown)
         select.select_by_visible_text("Astana")
 
         # wait until the button is present in DOM
-        schedule_button = WebDriverWait(driver, 20).until(
+        schedule_button = wait.until(
             EC.presence_of_element_located((By.ID, "appointments_submit"))
         )
 
         # check if it's enabled or disabled
         if schedule_button.is_enabled():
-            click_schedule_button(schedule_button)
+            print("✅ Schedule Appointment button is ENABLED, clicking it...")
+            send_telegram_message("✅ Schedule Appointment button is ENABLED, clicking it...")                
+            schedule_button.click()
+            send_html_to_telegram(driver) 
         else:
             print("❌ Schedule Appointment button is DISABLED")
-            requests.post(
-                f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-                data={"chat_id": CHAT_ID, "text": "❌ Schedule Appointment button is DISABLED"}
-)        
+            # send_telegram_message("❌ Schedule Appointment button is DISABLED")
+            # send_html_to_telegram(driver)  
 
     finally:
-        input("Browser is open. Inspect the modal, then press Enter to continue...")
+        #input("Browser is open. Inspect the modal, then press Enter to continue...")
+        # Optional: wait a moment after clicking (human-like pause)
+        time.sleep(2)
         driver.quit()
 
-def click_schedule_button(schedule_button):
-    print("✅ Schedule Appointment button is ENABLED, clicking it...")
-    schedule_button.click()
+def send_html_to_telegram(driver, filename="page.html"):
+    # get full page source
+    html = driver.page_source
+    
+    # save to file
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    # send file to Telegram
+    url = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
+    with open(filename, "rb") as f:
+        response = requests.post(url, data={"chat_id": CHAT_ID}, files={"document": f})
+
+    if response.status_code == 200:
+        print("📄 Sent page HTML to Telegram successfully!")
+    else:
+        print(f"⚠️ Failed to send HTML: {response.text}")
+
+def send_telegram_message(message: str):
+    """
+    Sends a text message into a Telegram group.
+    """
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
+
+    try:
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            print("📩 Telegram message sent successfully!")
+        else:
+            print(f"⚠️ Failed to send message: {response.text}")
+    except Exception as e:
+        print(f"⚠️ Error sending message: {e}")
+
+def create_driver():
+    options = Options()
+    headless = os.getenv("HEADLESS", "false").lower() == "true"
+
+    if headless:
+        options.add_argument("--headless=new")
+        options.add_argument("--window-size=1920,1080")  # force viewport size
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--no-sandbox")
+        print("🚀 Running Chrome in headless mode")
+    else:
+        print("🖥️ Running Chrome in normal mode")
+
+    return webdriver.Chrome(options=options)     
 
 if __name__ == "__main__":
     main()

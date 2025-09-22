@@ -8,6 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
+from datetime import datetime
 
 load_dotenv()
 
@@ -21,12 +22,14 @@ CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID"))
 def main():
     driver = create_driver()  # Selenium Manager will locate ChromeDriver automatically
     wait = WebDriverWait(driver, 20)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     try:
         #driver.get("https://ais.usvisa-info.com/en-kz/niv/users/sign_in")
         driver.get(URL2)
         #input("Browser is open. Inspect the modal, then press Enter to continue...")
 
+        driver.save_screenshot("headless_debug.png")
         # wait for the OK modal to appear
         ok_button = wait.until(
             EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
@@ -74,7 +77,7 @@ def main():
             schedule_button.click()
             send_html_to_telegram(driver) 
         else:
-            print("❌ Schedule Appointment button is DISABLED")
+            print(f"❌ Schedule Appointment button is DISABLED at {now}")
             # send_telegram_message("❌ Schedule Appointment button is DISABLED")
             # send_html_to_telegram(driver)  
 
@@ -118,21 +121,33 @@ def send_telegram_message(message: str):
     except Exception as e:
         print(f"⚠️ Error sending message: {e}")
 
+
 def create_driver():
+    """
+    Create a normal (non-headless) Chrome WebDriver and minimize its window.
+    Minimizing keeps the browser visible to the OS (so the site won't block headless),
+    but it won't bother you on the screen.
+    """
     options = Options()
-    headless = os.getenv("HEADLESS", "false").lower() == "true"
 
-    if headless:
-        options.add_argument("--headless=new")
-        options.add_argument("--window-size=1920,1080")  # force viewport size
-        options.add_argument("--disable-gpu")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--no-sandbox")
-        print("🚀 Running Chrome in headless mode")
-    else:
-        print("🖥️ Running Chrome in normal mode")
+    # Optional: set a deterministic window size (helps with layout/click issues)
+    options.add_argument("--window-size=1920,1080")
 
-    return webdriver.Chrome(options=options)     
+    # Optional: disable infobars / automation banner
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+
+    # Create the driver (Selenium Manager locates chromedriver automatically)
+    driver = webdriver.Chrome(options=options)
+
+    # Minimize the window so it doesn't block your screen
+    try:
+        driver.minimize_window()
+    except Exception as e:
+        # On some platforms/minor driver versions minimize might throw — ignore safely
+        print(f"⚠️ Could not minimize window: {e}")
+
+    return driver
 
 if __name__ == "__main__":
     main()

@@ -29,7 +29,7 @@ def main():
         driver.get(URL2)
         #input("Browser is open. Inspect the modal, then press Enter to continue...")
 
-        driver.save_screenshot("headless_debug.png")
+        # driver.save_screenshot("headless_debug.png")
         # wait for the OK modal to appear
         ok_button = wait.until(
             EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))

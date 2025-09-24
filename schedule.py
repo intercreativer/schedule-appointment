@@ -23,7 +23,7 @@ CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID"))
 def main():
     driver = create_driver()  # Selenium Manager will locate ChromeDriver automatically
     wait = WebDriverWait(driver, 20)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now().strftime("%H:%M")
 
     try:
         #driver.get("https://ais.usvisa-info.com/en-kz/niv/users/sign_in")

@@ -9,6 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 from datetime import datetime
+from selenium.common.exceptions import TimeoutException
 
 load_dotenv()
 
@@ -59,11 +60,17 @@ def main():
         sign_in_button.click()
 
         # wait for dropdown and select Astana
-        dropdown = wait.until(
-            EC.presence_of_element_located((By.ID, "appointments_consulate_appointment_facility_id"))
-        )
-        select = Select(dropdown)
-        select.select_by_visible_text("Astana")
+        try:
+            dropdown = wait.until(
+                EC.presence_of_element_located((By.ID, "appointments_consulate_appointment_facility_id"))
+            )
+            select = Select(dropdown)
+            select.select_by_visible_text("Astana")
+        except TimeoutException:
+            print("⚠️ Dropdown not found (possible logout/session expired). quiting...")
+            # driver.save_screenshot("error.png")  # save screenshot for debugging
+            driver.quit()
+            return  #
 
         # wait until the button is present in DOM
         schedule_button = wait.until(
@@ -77,7 +84,7 @@ def main():
             schedule_button.click()
             send_html_to_telegram(driver) 
         else:
-            print(f"❌ Schedule Appointment button is DISABLED at {now}")
+            print(f"❌ Button is DISABLED at {now}")
             # send_telegram_message("❌ Schedule Appointment button is DISABLED")
             # send_html_to_telegram(driver)  
 

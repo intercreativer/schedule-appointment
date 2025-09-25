@@ -1,2 +1,4 @@
 .env
 page.html
+*.log
+.DS_Store

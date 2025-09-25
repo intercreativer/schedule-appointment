@@ -31,11 +31,16 @@ def main():
         #input("Browser is open. Inspect the modal, then press Enter to continue...")
 
         # driver.save_screenshot("headless_debug.png")
-        # wait for the OK modal to appear
-        ok_button = wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
-        )
-        ok_button.click()   
+        # wait for the OK modal to appear 
+        try:
+            ok_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
+            )
+            ok_button.click() 
+        except Exception:
+            print("ℹ️ No OK modal appeared, quitting...")
+            driver.quit()
+            return  #                    
 
         # Wait for the form fields
         email_input = wait.until(EC.presence_of_element_located((By.ID, "user_email")))

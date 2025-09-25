@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 from datetime import datetime
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support import expected_conditions as EC
 
 load_dotenv()
 
@@ -80,19 +81,26 @@ def main():
 
 
         try:
-            date_input = wait.until(
-                EC.presence_of_element_located((By.ID, "appointments_consulate_appointment_date"))
+            calendar_container = WebDriverWait(driver, 10).until(
+                lambda d: d.find_element(By.ID, "consulate_date_time")
             )
-            print("📅 Date input field is present!")
-            send_telegram_message("📅 Date input field is present")
+
+            WebDriverWait(driver, 10).until(
+                lambda d: "block" in calendar_container.get_attribute("style")
+            )
+
+            print(f"✅ Calendar is available at {now}")
+            send_telegram_message("✅ Calendar is available")
+
         except TimeoutException:
-            print("⚠️ ❌ Calendar is not available. quiting...")
+            print(f"❌ Calendar is not availabe at {now}")
+            #send_telegram_message("❌ Calendar stayed HIDDEN (display:none)")
 
 
         # wait until the button is present in DOM
-        schedule_button = wait.until(
-            EC.presence_of_element_located((By.ID, "appointments_submit"))
-        )
+        # schedule_button = wait.until(
+        #     EC.presence_of_element_located((By.ID, "appointments_submit"))
+        # )
 
         # check if it's enabled or disabled
         # if schedule_button.is_enabled():
@@ -109,6 +117,7 @@ def main():
         #input("Browser is open. Inspect the modal, then press Enter to continue...")
         # Optional: wait a moment after clicking (human-like pause)
         time.sleep(2)
+        # input("🔎 Script finished. Press Enter to close the browser...")
         driver.quit()
 
 def send_html_to_telegram(driver, filename="page.html"):

@@ -77,19 +77,31 @@ def main():
             driver.quit()
             return  #
 
+
+
+        try:
+            date_input = wait.until(
+                EC.presence_of_element_located((By.ID, "appointments_consulate_appointment_date"))
+            )
+            print("📅 Date input field is present!")
+            send_telegram_message("📅 Date input field is present")
+        except TimeoutException:
+            print("⚠️ ❌ Calendar is not available. quiting...")
+
+
         # wait until the button is present in DOM
         schedule_button = wait.until(
             EC.presence_of_element_located((By.ID, "appointments_submit"))
         )
 
         # check if it's enabled or disabled
-        if schedule_button.is_enabled():
-            print("✅ Schedule Appointment button is ENABLED, clicking it...")
-            send_telegram_message("✅ Schedule Appointment button is ENABLED, clicking it...")                
-            schedule_button.click()
-            send_html_to_telegram(driver) 
-        else:
-            print(f"❌ Button is DISABLED at {now}")
+        # if schedule_button.is_enabled():
+        #     print("✅ Schedule Appointment button is ENABLED, clicking it...")
+        #     send_telegram_message("✅ Schedule Appointment button is ENABLED, clicking it...")                
+        #     schedule_button.click()
+        #     send_html_to_telegram(driver) 
+        # else:
+        #     print(f"❌ Button is DISABLED at {now}")
             # send_telegram_message("❌ Schedule Appointment button is DISABLED")
             # send_html_to_telegram(driver)  
 

@@ -1,150 +1,39 @@
 import os
-import requests
+import json
 import time
 from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 from datetime import datetime
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.support import expected_conditions as EC
 
 load_dotenv()
 
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
-URL = os.getenv("URL")
 URL2 = os.getenv("URL2")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID"))
 
-def main():
-    driver = create_driver()  # Selenium Manager will locate ChromeDriver automatically
-    wait = WebDriverWait(driver, 20)
-    now = datetime.now().strftime("%H:%M")
-
+# --- Driver creation ---
+def create_driver():
+    options = Options()
+    options.add_argument("--window-size=1920,1080")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+    driver = webdriver.Chrome(options=options)
     try:
-        #driver.get("https://ais.usvisa-info.com/en-kz/niv/users/sign_in")
-        driver.get(URL2)
-        #input("Browser is open. Inspect the modal, then press Enter to continue...")
+        driver.minimize_window()
+    except Exception as e:
+        print(f"⚠️ Could not minimize window: {e}")
+    return driver
 
-        # driver.save_screenshot("headless_debug.png")
-        # wait for the OK modal to appear 
-        try:
-            ok_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
-            )
-            ok_button.click() 
-        except Exception:
-            print("ℹ️ No OK modal appeared, quitting...")
-            driver.quit()
-            return  #                    
-
-        # Wait for the form fields
-        email_input = wait.until(EC.presence_of_element_located((By.ID, "user_email")))
-        password_input = driver.find_element(By.ID, "user_password")
-
-        # Fill in login details
-        email_input.send_keys(EMAIL)
-        password_input.send_keys(PASSWORD)
-
-        # ✅ Click the visible styled checkbox wrapper (not the hidden input)
-        policy_wrapper = wait.until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "div.icheckbox"))
-        )
-        policy_wrapper.click()
-
-        # # Optional: wait a moment after clicking (human-like pause)
-        # import time
-        # time.sleep(2)
-
-        # Click Sign In button
-        sign_in_button = driver.find_element(By.NAME, "commit")
-        sign_in_button.click()
-
-        # wait for dropdown and select Astana
-        try:
-            dropdown = wait.until(
-                EC.presence_of_element_located((By.ID, "appointments_consulate_appointment_facility_id"))
-            )
-            select = Select(dropdown)
-            select.select_by_visible_text("Astana")
-        except TimeoutException:
-            print("⚠️ Dropdown not found (possible logout/session expired). quiting...")
-            # driver.save_screenshot("error.png")  # save screenshot for debugging
-            driver.quit()
-            return  #
-
-
-
-        try:
-            calendar_container = WebDriverWait(driver, 10).until(
-                lambda d: d.find_element(By.ID, "consulate_date_time")
-            )
-
-            WebDriverWait(driver, 10).until(
-                lambda d: "block" in calendar_container.get_attribute("style")
-            )
-
-            print(f"✅ Calendar is available at {now}")
-            send_telegram_message("✅ Calendar is available")
-
-        except TimeoutException:
-            print(f"❌ Calendar is not availabe at {now}")
-            #send_telegram_message("❌ Calendar stayed HIDDEN (display:none)")
-
-
-        # wait until the button is present in DOM
-        # schedule_button = wait.until(
-        #     EC.presence_of_element_located((By.ID, "appointments_submit"))
-        # )
-
-        # check if it's enabled or disabled
-        # if schedule_button.is_enabled():
-        #     print("✅ Schedule Appointment button is ENABLED, clicking it...")
-        #     send_telegram_message("✅ Schedule Appointment button is ENABLED, clicking it...")                
-        #     schedule_button.click()
-        #     send_html_to_telegram(driver) 
-        # else:
-        #     print(f"❌ Button is DISABLED at {now}")
-            # send_telegram_message("❌ Schedule Appointment button is DISABLED")
-            # send_html_to_telegram(driver)  
-
-    finally:
-        #input("Browser is open. Inspect the modal, then press Enter to continue...")
-        # Optional: wait a moment after clicking (human-like pause)
-        time.sleep(2)
-        # input("🔎 Script finished. Press Enter to close the browser...")
-        driver.quit()
-
-def send_html_to_telegram(driver, filename="page.html"):
-    # get full page source
-    html = driver.page_source
-    
-    # save to file
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(html)
-
-    # send file to Telegram
-    url = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
-    with open(filename, "rb") as f:
-        response = requests.post(url, data={"chat_id": CHAT_ID}, files={"document": f})
-
-    if response.status_code == 200:
-        print("📄 Sent page HTML to Telegram successfully!")
-    else:
-        print(f"⚠️ Failed to send HTML: {response.text}")
-
+# --- Telegram helpers ---
 def send_telegram_message(message: str):
-    """
-    Sends a text message into a Telegram group.
-    """
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
-
     try:
         response = requests.post(url, data=payload)
         if response.status_code == 200:
@@ -154,33 +43,134 @@ def send_telegram_message(message: str):
     except Exception as e:
         print(f"⚠️ Error sending message: {e}")
 
-
-def create_driver():
+# --- Browser API fetch ---
+def fetch_api_with_driver(driver, url):
+    """Fetch JSON from URL inside the logged-in browser."""
+    script = """
+      const url = arguments[0];
+      const callback = arguments[1];
+      fetch(url, {
+        credentials: 'same-origin',
+        headers: { 'accept': 'application/json, text/javascript, */*; q=0.01' }
+      })
+      .then(r => r.json())
+      .then(data => callback(JSON.stringify(data)))
+      .catch(err => callback(JSON.stringify({error: err.toString()})));
     """
-    Create a normal (non-headless) Chrome WebDriver and minimize its window.
-    Minimizing keeps the browser visible to the OS (so the site won't block headless),
-    but it won't bother you on the screen.
+    result = driver.execute_async_script(script, url)
+    return json.loads(result)
+
+# --- Helpers ---
+def get_first_business_day(dates):
+    for entry in dates:
+        if entry.get("business_day"):
+            return entry["date"]
+    return None
+
+def schedule_appointment(driver, schedule_url, facility_id, date, time_slot):
+    """Send POST request via browser to schedule an appointment."""
+    csrf_token = driver.execute_script(
+        "return document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');"
+    )
+
+    payload = {
+        "authenticity_token": csrf_token,
+        "confirmed_limit_message": "1",
+        "use_consulate_appointment_capacity": "true",
+        "appointments[consulate_appointment][facility_id]": str(facility_id),
+        "appointments[consulate_appointment][date]": date,
+        "appointments[consulate_appointment][time]": time_slot,
+        "commit": "Schedule Appointment",
+    }
+
+    # Build URL-encoded payload string
+    payload_str = "&".join([f"{k}={v}" for k, v in payload.items()])
+
+    script = f"""
+        const url = "{schedule_url}";
+        const payload = "{payload_str}";
+        const callback = arguments[0];
+        fetch(url, {{
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {{
+                'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            }},
+            body: payload
+        }})
+        .then(r => r.text())
+        .then(html => callback({{status: 'ok', html: html}}))
+        .catch(err => callback({{status: 'error', error: err.toString()}}));
     """
-    options = Options()
+    result = driver.execute_async_script(script)
+    return result
 
-    # Optional: set a deterministic window size (helps with layout/click issues)
-    options.add_argument("--window-size=1920,1080")
+# --- Main ---
+def main():
+    driver = create_driver()
+    wait = WebDriverWait(driver, 20)
 
-    # Optional: disable infobars / automation banner
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
-
-    # Create the driver (Selenium Manager locates chromedriver automatically)
-    driver = webdriver.Chrome(options=options)
-
-    # Minimize the window so it doesn't block your screen
     try:
-        driver.minimize_window()
-    except Exception as e:
-        # On some platforms/minor driver versions minimize might throw — ignore safely
-        print(f"⚠️ Could not minimize window: {e}")
+        driver.get(URL2)
+        now = datetime.now().strftime("%H:%M")
 
-    return driver
+        # Handle modal if present
+        try:
+            ok_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']")))
+            ok_button.click()
+        except Exception:
+            print(f"ℹ️ No OK modal appeared at {now}")
+
+        # Login
+        email_input = wait.until(EC.presence_of_element_located((By.ID, "user_email")))
+        password_input = driver.find_element(By.ID, "user_password")
+        email_input.send_keys(EMAIL)
+        password_input.send_keys(PASSWORD)
+
+        # Accept policy
+        policy_wrapper = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.icheckbox")))
+        policy_wrapper.click()
+
+        # Submit login
+        sign_in_button = driver.find_element(By.NAME, "commit")
+        sign_in_button.click()
+
+        # --- 1. Fetch available dates ---
+        days_api = "https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment/days/134.json?appointments[expedite]=false"
+        available_days = fetch_api_with_driver(driver, days_api)
+        if not available_days:
+            print("❌ No available dates")
+            return
+
+        first_day = get_first_business_day(available_days)
+        print(f"✅ First available date: {first_day}")
+
+        # --- 2. Fetch available times ---
+        times_api = f"https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment/times/134.json?date={first_day}&appointments[expedite]=false"
+        available_times = fetch_api_with_driver(driver, times_api)
+        if not available_times.get("available_times"):
+            print(f"❌ No available times on {first_day}")
+            return
+
+        first_time = available_times["available_times"][0]
+        print(f"✅ First available time: {first_time}")
+
+        # --- 3. Schedule appointment ---
+        # schedule_url = "https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment"
+        # result = schedule_appointment(driver, schedule_url, 134, first_day, first_time)
+
+        # if result.get("status") == "ok":
+        #     print(f"🎯 Appointment scheduled for {first_day} at {first_time}")
+        #     send_telegram_message(f"🎯 Appointment scheduled for {first_day} at {first_time}")
+        # else:
+        #     print(f"❌ Failed to schedule appointment: {result.get('error')}")
+
+        
+
+    finally:
+        input("🔎 Script finished. Press Enter to close the browser...")
+        driver.quit()
 
 if __name__ == "__main__":
     main()

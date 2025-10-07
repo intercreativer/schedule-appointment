@@ -83,9 +83,59 @@ def main():
             if available_dates is not None:
                 # Check if we have actual dates (not just empty array)
                 if isinstance(available_dates, list) and len(available_dates) > 0:
-                    telegram_message = f"📅 Available appointment dates found!\n\n"
-                    telegram_message += f"🔍 Found {len(available_dates)} available dates."
-                    #send_telegram_message(telegram_message)
+                    #print(f"✅ Found {len(available_dates)} available date(s)")
+                    
+                    # Get the first available date
+                    first_date = available_dates[0]['date']
+                    print(f"📅 First available date: {first_date}")
+                    
+                    # Get available times for this date
+                    available_times = get_available_times_via_js(driver, facility_id="134", date=first_date, expedite="false")
+                    
+                    if available_times is not None and isinstance(available_times, dict) and 'available_times' in available_times:
+                        times_list = available_times['available_times']
+                        if len(times_list) > 0:
+                            #print(f"⏰ Found {len(times_list)} available time(s) for {first_date}")
+                            
+                            # Get the last available time
+                            last_time = times_list[-1]
+                            print(f"⏰ Last available time: {last_time}")
+                        else:
+                            print(f"⏰ No available times found for {first_date}")
+                            last_time = None
+                    elif available_times is not None and isinstance(available_times, list) and len(available_times) > 0:
+                        # Handle old format (list of objects with 'time' property)
+                        print(f"⏰ Found {len(available_times)} available time(s) for {first_date}")
+                        last_time = available_times[-1]['time']
+                        print(f"⏰ Last available time: {last_time}")
+                    else:
+                        print(f"⏰ No available times found for {first_date}")
+                        last_time = None
+                    
+                    # Only schedule if we have a valid time
+                    if last_time is not None:
+                        # # Schedule the appointment
+                        # schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=first_date, time=last_time)
+                        
+                        # if schedule_result:
+                        #     print("✅ Appointment scheduled successfully!")
+                        #     telegram_message = f"🎉 APPOINTMENT SCHEDULED!\n\n"
+                        #     telegram_message += f"📅 Date: {first_date}\n"
+                        #     telegram_message += f"⏰ Time: {last_time}\n"
+                        #     telegram_message += f"🔍 Check the console output for details."
+                        #     send_telegram_message(telegram_message)
+                        # else:
+                        #     print("❌ Failed to schedule appointment")
+                        #     telegram_message = f"❌ Failed to schedule appointment for {first_date} at {last_time}"
+                        #     #send_telegram_message(telegram_message)
+                        print(f"🎯 Ready to schedule appointment for {first_date} at {last_time}")
+                    else:
+                        print(f"⏰ No valid time found for {first_date}")
+                        telegram_message = f"📅 Available appointment dates found!\n\n"
+                        telegram_message += f"🔍 Found {len(available_dates)} available dates.\n"
+                        telegram_message += f"📅 First date: {first_date}\n"
+                        telegram_message += f"⏰ No available times for this date"
+                        #send_telegram_message(telegram_message)
                 else:
                     print("📭 No available dates found")
                     #send_telegram_message("📭 No available appointment dates found")
@@ -196,6 +246,117 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
     except Exception as e:
         print(f"❌ JavaScript API call failed: {e}")
         return None
+
+def get_available_times_via_js(driver, facility_id="134", date="2025-12-18", expedite="false"):
+    """
+    Makes API call to get available appointment times for a specific date using JavaScript.
+    
+    Args:
+        driver: Selenium WebDriver instance with active session
+        facility_id: Facility ID (134 for Astana, 135 for Almaty)
+        date: Date in YYYY-MM-DD format
+        expedite: Whether to check for expedited appointments
+    
+    Returns:
+        list: Available times data or None if failed
+    """
+    try:
+        
+        # Execute JavaScript to make the API call in the browser context
+        js_code = f"""
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment/times/{facility_id}.json?date={date}&appointments[expedite]={expedite}', false);
+        xhr.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.send();
+        
+        if (xhr.status === 200) {{
+            try {{
+                return JSON.parse(xhr.responseText);
+            }} catch (e) {{
+                console.error('JSON parse error:', e);
+                return null;
+            }}
+        }} else {{
+            console.error('HTTP error:', xhr.status, xhr.responseText);
+            return null;
+        }}
+        """
+        
+        result = driver.execute_script(js_code)
+        print(f"🌐 Available times result: {result}")
+        return result
+        
+    except Exception as e:
+        print(f"❌ JavaScript API call for times failed: {e}")
+        return None
+
+def schedule_appointment_via_js(driver, facility_id="134", date="2025-12-08", time="08:00"):
+    """
+    Makes POST request to schedule an appointment using JavaScript.
+    
+    Args:
+        driver: Selenium WebDriver instance with active session
+        facility_id: Facility ID (134 for Astana, 135 for Almaty)
+        date: Date in YYYY-MM-DD format
+        time: Time in HH:MM format
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        print(f"📝 Scheduling appointment for {date} at {time}")
+        
+        # Get CSRF token from the page
+        csrf_token = None
+        try:
+            csrf_meta = driver.find_element(By.CSS_SELECTOR, 'meta[name="csrf-token"]')
+            csrf_token = csrf_meta.get_attribute('content')
+            print(f"🔐 Using CSRF token: {csrf_token[:20]}...")
+        except Exception as e:
+            print(f"⚠️ Could not extract CSRF token: {e}")
+            return False
+        
+        # Execute JavaScript to make the POST request
+        js_code = f"""
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment', false);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        
+        var formData = 'authenticity_token={csrf_token}&confirmed_limit_message=1&use_consulate_appointment_capacity=true&appointments[consulate_appointment][facility_id]={facility_id}&appointments[consulate_appointment][date]={date}&appointments[consulate_appointment][time]={time}&commit=Schedule+Appointment';
+        
+        xhr.send(formData);
+        
+        return {{
+            status: xhr.status,
+            responseText: xhr.responseText,
+            finalUrl: xhr.responseURL || window.location.href
+        }};
+        """
+        
+        result = driver.execute_script(js_code)
+        print(f"📊 Schedule response status: {result['status']}")
+        print(f"📊 Final URL: {result['finalUrl']}")
+        
+        if result['status'] in [200, 302]:
+            # Save the response HTML to file
+            with open("appointment_result.html", "w", encoding="utf-8") as f:
+                f.write(result['responseText'])
+            print("💾 Appointment result saved to appointment_result.html")
+            
+            # Send the HTML file via Telegram
+            send_html_to_telegram(driver, "appointment_result.html")
+            
+            return True
+        else:
+            print(f"❌ Schedule request failed with status {result['status']}")
+            print(f"📄 Response: {result['responseText'][:500]}...")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error scheduling appointment: {e}")
+        return False
 
 
 def send_telegram_message(message: str):

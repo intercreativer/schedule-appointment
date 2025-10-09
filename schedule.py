@@ -109,20 +109,20 @@ def main():
                     
                     # Only schedule if we have a valid time
                     if last_time is not None:
-                        # # Schedule the appointment
-                        # schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=first_date, time=last_time)
+                        # Schedule the appointment
+                        schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=first_date, time=last_time)
                         
-                        # if schedule_result:
-                        #     print("✅ Appointment scheduled successfully!")
-                        #     telegram_message = f"🎉 APPOINTMENT SCHEDULED!\n\n"
-                        #     telegram_message += f"📅 Date: {first_date}\n"
-                        #     telegram_message += f"⏰ Time: {last_time}\n"
-                        #     telegram_message += f"🔍 Check the console output for details."
-                        #     send_telegram_message(telegram_message)
-                        # else:
-                        #     print("❌ Failed to schedule appointment")
-                        #     telegram_message = f"❌ Failed to schedule appointment for {first_date} at {last_time}"
-                        #     #send_telegram_message(telegram_message)
+                        if schedule_result:
+                            print("✅ Appointment scheduled successfully!")
+                            telegram_message = f"🎉 APPOINTMENT SCHEDULED!\n\n"
+                            telegram_message += f"📅 Date: {first_date}\n"
+                            telegram_message += f"⏰ Time: {last_time}\n"
+                            telegram_message += f"🔍 Check the console output for details."
+                            send_telegram_message(telegram_message)
+                        else:
+                            print("❌ Failed to schedule appointment")
+                            telegram_message = f"❌ Failed to schedule appointment for {first_date} at {last_time}"
+                            send_telegram_message(telegram_message)
                         print(f"🎯 Ready to schedule appointment for {first_date} at {last_time}")
                     else:
                         print(f"⏰ No valid time found for {first_date}")
@@ -145,39 +145,6 @@ def main():
             return  #
 
 
-
-        # try:
-        #     calendar_container = WebDriverWait(driver, 10).until(
-        #         lambda d: d.find_element(By.ID, "consulate_date_time")
-        #     )
-
-        #     WebDriverWait(driver, 10).until(
-        #         lambda d: "block" in calendar_container.get_attribute("style")
-        #     )
-
-        #     print(f"✅ Calendar is available at {now}")
-        #     send_telegram_message("✅ Calendar is available")
-
-        # except TimeoutException:
-        #     print(f"❌ Calendar is not availabe at {now}")
-            #send_telegram_message("❌ Calendar stayed HIDDEN (display:none)")
-
-
-        # wait until the button is present in DOM
-        # schedule_button = wait.until(
-        #     EC.presence_of_element_located((By.ID, "appointments_submit"))
-        # )
-
-        # check if it's enabled or disabled
-        # if schedule_button.is_enabled():
-        #     print("✅ Schedule Appointment button is ENABLED, clicking it...")
-        #     send_telegram_message("✅ Schedule Appointment button is ENABLED, clicking it...")                
-        #     schedule_button.click()
-        #     send_html_to_telegram(driver) 
-        # else:
-        #     print(f"❌ Button is DISABLED at {now}")
-            # send_telegram_message("❌ Schedule Appointment button is DISABLED")
-            # send_html_to_telegram(driver)  
 
     finally:
         #input("Browser is open. Inspect the modal, then press Enter to continue...")
@@ -318,6 +285,10 @@ def schedule_appointment_via_js(driver, facility_id="134", date="2025-12-08", ti
         xhr.open('POST', 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment', false);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.setRequestHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7');
+        xhr.setRequestHeader('Origin', 'https://ais.usvisa-info.com');
+        xhr.setRequestHeader('Referer', 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment');
+        xhr.withCredentials = true;
         
         var formData = 'authenticity_token={csrf_token}&confirmed_limit_message=1&use_consulate_appointment_capacity=true&appointments[consulate_appointment][facility_id]={facility_id}&appointments[consulate_appointment][date]={date}&appointments[consulate_appointment][time]={time}&commit=Schedule+Appointment';
         
@@ -326,13 +297,26 @@ def schedule_appointment_via_js(driver, facility_id="134", date="2025-12-08", ti
         return {{
             status: xhr.status,
             responseText: xhr.responseText,
-            finalUrl: xhr.responseURL || window.location.href
+            finalUrl: xhr.responseURL || window.location.href,
+            headers: xhr.getAllResponseHeaders()
         }};
         """
         
         result = driver.execute_script(js_code)
         print(f"📊 Schedule response status: {result['status']}")
         print(f"📊 Final URL: {result['finalUrl']}")
+        print(f"📊 Response headers: {result['headers']}")
+        
+        # Debug: Check current page URL and cookies
+        current_url = driver.current_url
+        print(f"🌐 Current page URL: {current_url}")
+        
+        # Check if we're still logged in by looking for logout link or user info
+        try:
+            logout_element = driver.find_element(By.CSS_SELECTOR, "a[href*='sign_out']")
+            print("✅ Still logged in (logout link found)")
+        except:
+            print("❌ Not logged in (no logout link found)")
         
         if result['status'] in [200, 302]:
             # Save the response HTML to file

@@ -41,7 +41,7 @@ def main():
             )
             ok_button.click() 
         except Exception:
-            print("ℹ️ No OK modal appeared, quitting...")
+            print(f"ℹ️ No OK modal appeared at {now}")
             driver.quit()
             return  #                    
 
@@ -132,7 +132,7 @@ def main():
                         telegram_message += f"⏰ No available times for this date"
                         #send_telegram_message(telegram_message)
                 else:
-                    print("📭 No available dates found")
+                    print(f"📭 No available dates found at {now}")
                     #send_telegram_message("📭 No available appointment dates found")
             else:
                 print("❌ API call failed")
@@ -150,7 +150,7 @@ def main():
         #input("Browser is open. Inspect the modal, then press Enter to continue...")
         # Optional: wait a moment after clicking (human-like pause)
         time.sleep(2)
-        input("🔎 Script finished. Press Enter to close the browser...")
+        # input("🔎 Script finished. Press Enter to close the browser...")
         driver.quit()
 
 def send_html_to_telegram(driver, filename="page.html"):
@@ -202,7 +202,7 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         """
         
         result = driver.execute_script(js_code)
-        print(f"🌐 JavaScript API call result: {result}")
+        # print(f"🌐 JavaScript API call result: {result}")
         return result
         
     except Exception as e:

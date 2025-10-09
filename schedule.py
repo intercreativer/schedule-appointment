@@ -99,15 +99,10 @@ def main():
                             
                             # Get the last available time
                             last_time = times_list[-1]
-                            print(f"⏰ Last available time: {last_time}")
+                            # print(f"⏰ Last available time: {last_time}")
                         else:
                             print(f"⏰ No available times found for {first_date}")
                             last_time = None
-                    elif available_times is not None and isinstance(available_times, list) and len(available_times) > 0:
-                        # Handle old format (list of objects with 'time' property)
-                        print(f"⏰ Found {len(available_times)} available time(s) for {first_date}")
-                        last_time = available_times[-1]['time']
-                        print(f"⏰ Last available time: {last_time}")
                     else:
                         print(f"⏰ No available times found for {first_date}")
                         last_time = None

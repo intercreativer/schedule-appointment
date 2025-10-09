@@ -39,7 +39,7 @@ def main():
             )
             ok_button.click() 
         except Exception:
-            print("ℹ️ No OK modal appeared, quitting...")
+            print(f"ℹ️ No OK modal appeared at {now}")
             driver.quit()
             return  #                    
 

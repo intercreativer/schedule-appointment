@@ -24,11 +24,15 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID"))
 
 def main():
-    driver = create_driver()  # Selenium Manager will locate ChromeDriver automatically
-    wait = WebDriverWait(driver, 20)
+    driver = None
     now = datetime.now().strftime("%H:%M")
-
+    
     try:
+        driver = create_driver()  # Selenium Manager will locate ChromeDriver automatically
+        wait = WebDriverWait(driver, 20)
+        
+        # print(f"🔄 Starting automation at {now}")
+        
         #driver.get("https://ais.usvisa-info.com/en-kz/niv/users/sign_in")
         driver.get(URL2)
         #input("Browser is open. Inspect the modal, then press Enter to continue...")
@@ -143,6 +147,18 @@ def main():
             # driver.save_screenshot("error.png")  # save screenshot for debugging
             driver.quit()
             return  #
+            
+    except Exception as e:
+        error_msg = f"❌ Connection error at {now}: {e}"
+        print(error_msg)
+        
+        # Clean up driver if it exists
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
+        return
 
 
 
@@ -151,7 +167,21 @@ def main():
         # Optional: wait a moment after clicking (human-like pause)
         time.sleep(2)
         # input("🔎 Script finished. Press Enter to close the browser...")
-        driver.quit()
+        
+        # Safely quit the driver
+        if driver:
+            try:
+                driver.quit()
+                # print("✅ Driver closed successfully")
+            except Exception as e:
+                print(f"⚠️ Error closing driver: {e}")
+                # Force kill any remaining Chrome processes
+                try:
+                    import subprocess
+                    subprocess.run(["pkill", "-f", "chrome"], check=False)
+                    print("🧹 Killed remaining Chrome processes")
+                except:
+                    pass
 
 def send_html_to_telegram(driver, filename="page.html"):
     # get full page source
@@ -366,13 +396,37 @@ def create_driver():
 
     # Optional: set a deterministic window size (helps with layout/click issues)
     options.add_argument("--window-size=1920,1080")
-
+    
+    # Add stability options for frequent runs
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-plugins")
+    options.add_argument("--disable-images")  # Faster loading
+    # Note: We need JavaScript for API calls, so don't disable it
+    options.add_argument("--disable-web-security")
+    options.add_argument("--disable-features=VizDisplayCompositor")
+    
+    # Set timeouts
+    options.add_argument("--page-load-strategy=eager")
+    
     # Optional: disable infobars / automation banner
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
+    
+    # Disable logging to reduce noise
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    options.add_experimental_option('useAutomationExtension', False)
+    options.add_argument('--disable-logging')
+    options.add_argument('--log-level=3')
 
     # Create the driver using Selenium Manager (automatically handles ChromeDriver)
     driver = webdriver.Chrome(options=options)
+    
+    # Set timeouts
+    driver.set_page_load_timeout(30)
+    driver.implicitly_wait(10)
 
     # Minimize the window so it doesn't block your screen
     try:

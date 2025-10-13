@@ -429,11 +429,11 @@ def create_driver():
     driver.implicitly_wait(10)
 
     # Minimize the window so it doesn't block your screen
-    try:
-        driver.minimize_window()
-    except Exception as e:
-        # On some platforms/minor driver versions minimize might throw — ignore safely
-        print(f"⚠️ Could not minimize window: {e}")
+    # try:
+    #     driver.minimize_window()
+    # except Exception as e:
+    #     # On some platforms/minor driver versions minimize might throw — ignore safely
+    #     print(f"⚠️ Could not minimize window: {e}")
 
     return driver
 

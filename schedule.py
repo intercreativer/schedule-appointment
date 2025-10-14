@@ -10,7 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from datetime import datetime
+from datetime import datetime, date
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -22,6 +22,40 @@ URL = os.getenv("URL")
 URL2 = os.getenv("URL2")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID"))
+
+def is_date_acceptable(appointment_date_str):
+    """
+    Check if the appointment date meets our criteria.
+    
+    Args:
+        appointment_date_str: Date string in format "YYYY-MM-DD"
+        
+    Returns:
+        bool: True if date is acceptable, False otherwise
+    """
+    try:
+        # Parse the appointment date
+        appointment_date = datetime.strptime(appointment_date_str, "%Y-%m-%d").date()
+        
+        # Define the unacceptable period (Dec 25 through Jan 12)
+        # We'll check for any year, so we need to handle year boundaries
+        current_year = appointment_date.year
+        
+        # Create the unacceptable period dates
+        start_date = date(2025, 12, 20)
+        end_date = date(2026, 1, 15)  # Next year's Jan 12
+        
+        # Check if the appointment date falls in the unacceptable period
+        if start_date <= appointment_date <= end_date:
+            print(f"❌ Date {appointment_date_str} falls in unacceptable period (Dec 20 - Jan 15")
+            return False
+        else:
+            print(f"✅ Date {appointment_date_str} is acceptable")
+            return True
+            
+    except ValueError as e:
+        print(f"⚠️ Could not parse date {appointment_date_str}: {e}")
+        return False
 
 def main():
     driver = None
@@ -87,64 +121,68 @@ def main():
             if available_dates is not None:
                 # Check if we have actual dates (not just empty array)
                 if isinstance(available_dates, list) and len(available_dates) > 0:
-                    #print(f"✅ Found {len(available_dates)} available date(s)")
+                    print(f"✅ Found {len(available_dates)} available date(s)")
                     
-                    # Get the first available date
-                    first_date = available_dates[0]['date']
-                    print(f"📅 First available date: {first_date}")
+                    # Cycle through all available dates to find an acceptable one
+                    acceptable_date = None
+                    acceptable_time = None
                     
-                    # Get available times for this date
-                    available_times = get_available_times_via_js(driver, facility_id="134", date=first_date, expedite="false")
-                    
-                    if available_times is not None and isinstance(available_times, dict) and 'available_times' in available_times:
-                        times_list = available_times['available_times']
-                        if len(times_list) > 0:
-                            #print(f"⏰ Found {len(times_list)} available time(s) for {first_date}")
+                    for date_info in available_dates:
+                        current_date = date_info['date']
+                        print(f"\n🔍 Checking date: {current_date}")
+                        
+                        # Check if this date is acceptable
+                        if is_date_acceptable(current_date):
+                            print(f"✅ Date {current_date} is acceptable, checking for available times...")
                             
-                            # Get the last available time
-                            last_time = times_list[-1]
-                            # print(f"⏰ Last available time: {last_time}")
+                            # Get available times for this date
+                            available_times = get_available_times_via_js(driver, facility_id="134", date=current_date, expedite="false")
+                            
+                            if available_times is not None and isinstance(available_times, dict) and 'available_times' in available_times:
+                                times_list = available_times['available_times']
+                                if len(times_list) > 0:
+                                    print(f"⏰ Found {len(times_list)} available time(s) for {current_date}")
+                                    
+                                    # Get the last available time
+                                    last_time = times_list[-1]
+                                    print(f"⏰ Last available time: {last_time}")
+                                    
+                                    # This date and time are acceptable
+                                    acceptable_date = current_date
+                                    acceptable_time = last_time
+                                    break
+                                else:
+                                    print(f"⏰ No available times found for {current_date}")
+                            else:
+                                print(f"⏰ No available times found for {current_date}")
                         else:
-                            print(f"⏰ No available times found for {first_date}")
-                            last_time = None
-                    else:
-                        print(f"⏰ No available times found for {first_date}")
-                        last_time = None
+                            print(f"❌ Date {current_date} is not acceptable, trying next date...")
                     
-                    # Only schedule if we have a valid time
-                    if last_time is not None:
+                    # If we found an acceptable date and time, schedule the appointment
+                    if acceptable_date and acceptable_time:
+                        print(f"\n🎯 Scheduling appointment for {acceptable_date} at {acceptable_time}")
+                        
                         # Schedule the appointment
-                        schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=first_date, time=last_time)
+                        schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=acceptable_date, time=acceptable_time)
                         
                         if schedule_result:
                             print("✅ Appointment scheduled successfully!")
                             telegram_message = f"🎉 APPOINTMENT SCHEDULED!\n\n"
-                            telegram_message += f"📅 Date: {first_date}\n"
-                            telegram_message += f"⏰ Time: {last_time}\n"
+                            telegram_message += f"📅 Date: {acceptable_date}\n"
+                            telegram_message += f"⏰ Time: {acceptable_time}\n"
                             telegram_message += f"🔍 Check the console output for details."
                             send_telegram_message(telegram_message)
                         else:
                             print("❌ Failed to schedule appointment")
-                            telegram_message = f"❌ Failed to schedule appointment for {first_date} at {last_time}"
+                            telegram_message = f"❌ Failed to schedule appointment for {acceptable_date} at {acceptable_time}"
                             send_telegram_message(telegram_message)
-                        print(f"🎯 Ready to schedule appointment for {first_date} at {last_time}")
-                    else:
-                        print(f"⏰ No valid time found for {first_date}")
-                        telegram_message = f"📅 Available appointment dates found!\n\n"
-                        telegram_message += f"🔍 Found {len(available_dates)} available dates.\n"
-                        telegram_message += f"📅 First date: {first_date}\n"
-                        telegram_message += f"⏰ No available times for this date"
-                        #send_telegram_message(telegram_message)
                 else:
                     print(f"📭 No available dates found at {now}")
-                    #send_telegram_message("📭 No available appointment dates found")
             else:
-                print("❌ API call failed")
-                #send_telegram_message("❌ Failed to fetch appointment dates")
+                print(f"❌ API call failed at {now}")
                 
         except TimeoutException:
             print("⚠️ Dropdown not found (possible logout/session expired). quiting...")
-            # driver.save_screenshot("error.png")  # save screenshot for debugging
             driver.quit()
             return  #
             

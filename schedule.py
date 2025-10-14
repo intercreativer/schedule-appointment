@@ -187,7 +187,14 @@ def main():
             return  #
             
     except Exception as e:
-        error_msg = f"❌ Connection error at {now}: {e}"
+        # Extract just the main error message without stack trace
+        error_message = str(e)
+        if "Message:" in error_message:
+            # For Selenium errors, extract just the main message
+            main_message = error_message.split("Message:")[1].split("(Session info:")[0].strip()
+            error_msg = f"❌ Connection error at {now}: {main_message}"
+        else:
+            error_msg = f"❌ Connection error at {now}: {error_message}"
         print(error_msg)
         
         # Clean up driver if it exists

@@ -23,6 +23,307 @@ URL2 = os.getenv("URL2")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = int(os.getenv("TELEGRAM_CHAT_ID"))
 
+class SessionManager:
+    def __init__(self):
+        self.driver = None
+        self.session_start_time = None
+        self.last_check_time = None
+        self.session_file = "session_info.json"
+        
+    def load_session_info(self):
+        """Load session info from file if it exists."""
+        try:
+            if os.path.exists(self.session_file):
+                with open(self.session_file, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Could not load session info: {e}")
+        return None
+    
+    def save_session_info(self, session_info):
+        """Save session info to file."""
+        try:
+            with open(self.session_file, 'w') as f:
+                json.dump(session_info, f, indent=2)
+        except Exception as e:
+            print(f"⚠️ Could not save session info: {e}")
+    
+    def is_session_expired(self, max_age_minutes=30):
+        """Check if session should be considered expired based on age."""
+        if not self.session_start_time:
+            return True
+        
+        session_age = datetime.now() - self.session_start_time
+        return session_age.total_seconds() > (max_age_minutes * 60)
+    
+    def should_renew_session(self):
+        """Determine if we should renew the session."""
+        # Check if session is too old
+        if self.is_session_expired():
+            print(f"🕐 Session expired (older than 30 minutes)")
+            return True
+        
+        # Check if we haven't checked in a while
+        if self.last_check_time:
+            time_since_check = datetime.now() - self.last_check_time
+            if time_since_check.total_seconds() > (5 * 60):  # 5 minutes
+                print(f"🕐 Haven't checked session in {time_since_check.total_seconds()/60:.1f} minutes")
+                return True
+        
+        return False
+
+def login_and_setup_session(driver):
+    """Handle the login process and return True if successful."""
+    wait = WebDriverWait(driver, 20)
+    
+    try:
+        # Wait for the OK modal to appear 
+        try:
+            ok_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
+            )
+            ok_button.click() 
+        except Exception:
+            print(f"ℹ️ No OK modal appeared")
+            return False
+
+        # Wait for the form fields
+        email_input = wait.until(EC.presence_of_element_located((By.ID, "user_email")))
+        password_input = driver.find_element(By.ID, "user_password")
+
+        # Fill in login details
+        email_input.send_keys(EMAIL)
+        password_input.send_keys(PASSWORD)
+
+        # Click the policy checkbox
+        policy_wrapper = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "div.icheckbox"))
+        )
+        policy_wrapper.click()
+
+        # Click Sign In button
+        sign_in_button = driver.find_element(By.NAME, "commit")
+        sign_in_button.click()
+
+        # Wait for dropdown to appear (indicates successful login)
+        dropdown = wait.until(
+            EC.presence_of_element_located((By.ID, "appointments_consulate_appointment_facility_id"))
+        )
+        
+        # Select Astana
+        select = Select(dropdown)
+        select.select_by_visible_text("Astana")
+        
+        print("✅ Login successful and Astana selected")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Login failed: {e}")
+        return False
+
+def check_appointments_only(driver):
+    """Check for appointments without logging in (assumes already logged in)."""
+    try:
+        now = datetime.now().strftime("%H:%M:%S")
+        # Check if session is still valid
+        if not check_session_validity(driver):
+            print(f"❌ Session is no longer valid at {now}")
+            return False
+        
+        # Get available dates
+        available_dates = get_available_dates_via_js(driver, facility_id="134", expedite="false")
+        
+        if available_dates is not None and isinstance(available_dates, list) and len(available_dates) > 0:
+            print(f"✅ Found {len(available_dates)} available date(s)")
+            
+            # Cycle through all available dates to find an acceptable one
+            acceptable_date = None
+            acceptable_time = None
+            
+            for date_info in available_dates:
+                current_date = date_info['date']
+                print(f"\n🔍 Checking date: {current_date}")
+                
+                # Check if this date is acceptable
+                if is_date_acceptable(current_date):
+                    print(f"✅ Date {current_date} is acceptable, checking for available times...")
+                    
+                    # Get available times for this date
+                    available_times = get_available_times_via_js(driver, facility_id="134", date=current_date, expedite="false")
+                    
+                    if available_times is not None and isinstance(available_times, dict) and 'available_times' in available_times:
+                        times_list = available_times['available_times']
+                        if len(times_list) > 0:
+                            print(f"⏰ Found {len(times_list)} available time(s) for {current_date}")
+                            
+                            # Get the last available time
+                            last_time = times_list[-1]
+                            print(f"⏰ Last available time: {last_time}")
+                            
+                            # This date and time are acceptable
+                            acceptable_date = current_date
+                            acceptable_time = last_time
+                            break
+                        else:
+                            print(f"⏰ No available times found for {current_date}")
+                    else:
+                        print(f"⏰ No available times found for {current_date}")
+                else:
+                    print(f"❌ Date {current_date} is not acceptable, trying next date...")
+            
+            # If we found an acceptable date and time, schedule the appointment
+            if acceptable_date and acceptable_time:
+                print(f"\n🎯 Scheduling appointment for {acceptable_date} at {acceptable_time}")
+                
+                # Schedule the appointment
+                schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=acceptable_date, time=acceptable_time)
+                
+                if schedule_result:
+                    print("✅ Appointment scheduled successfully!")
+                    telegram_message = f"🎉 APPOINTMENT SCHEDULED!\n\n"
+                    telegram_message += f"📅 Date: {acceptable_date}\n"
+                    telegram_message += f"⏰ Time: {acceptable_time}\n"
+                    telegram_message += f"🔍 Check the console output for details."
+                    send_telegram_message(telegram_message)
+                    return True
+                else:
+                    print("❌ Failed to schedule appointment")
+                    telegram_message = f"❌ Failed to schedule appointment for {acceptable_date} at {acceptable_time}"
+                    send_telegram_message(telegram_message)
+            else:
+                print(f"\n❌ No acceptable dates found among {len(available_dates)} available dates")
+                print("💡 All available dates either:")
+                print("   - Fall in the unacceptable period (Dec 20 - Jan 15)")
+                print("   - Have no available times")
+        else:
+            print(f"📭 No available dates found at {now}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error checking appointments: {e}")
+        return False
+
+def check_session_validity(driver):
+    """
+    Check if the current session is still valid by making a simple API call.
+    Returns True if session is valid, False otherwise.
+    """
+    try:
+        # Check if we're still on the appointment page
+        current_url = driver.current_url
+        if "appointment" not in current_url:
+            print(f"🔍 Session invalid: not on appointment page, URL: {current_url}")
+            return False
+        
+        # Check if we can find the dropdown (indicates we're logged in)
+        try:
+            dropdown = driver.find_element(By.ID, "appointments_consulate_appointment_facility_id")
+            if not dropdown.is_displayed():
+                print("🔍 Session invalid: dropdown not visible")
+                return False
+        except:
+            print("🔍 Session invalid: dropdown not found")
+            return False
+        
+        # Simple session check - just try to get available dates
+        result = get_available_dates_via_js(driver, facility_id="134", expedite="false")
+        
+        # For session validation, we just need to know if the API call worked
+        # Even an empty array [] means the session is valid
+        if result is None:
+            print("🔍 Session invalid: API call returned null")
+            return False
+        else:
+            print("🔍 Session valid: API call successful")
+            return True
+        
+    except Exception as e:
+        print(f"🔍 Session check failed: {e}")
+        return False
+
+def main_persistent_session():
+    """Main function that keeps browser open and checks appointments in a loop."""
+    driver = None
+    session_start_time = datetime.now()
+    check_interval = 60  # Check every 60 seconds (1 minute)
+    max_session_age = 120 * 60  # 25 minutes (quit before 30 min expiration) 
+    
+    try:
+        # Login once
+        print(f"🔐 Starting persistent session at {session_start_time.strftime('%H:%M')}")
+        driver = create_driver()
+        driver.get(URL2)
+        
+        if not login_and_setup_session(driver):
+            print("❌ Login failed")
+            return
+        
+        print("✅ Login successful! Starting appointment monitoring loop...")
+        print(f"🔄 Will check every {check_interval} seconds")
+        print(f"⏰ Will quit after {max_session_age/60:.0f} minutes to avoid session expiration")
+        
+        # Main monitoring loop
+        while True:
+            current_time = datetime.now()
+            session_age = (current_time - session_start_time).total_seconds()
+            
+            # Check if we should quit before session expires
+            if session_age > max_session_age:
+                print(f"⏰ Session age: {session_age/60:.1f} minutes - quitting to avoid expiration")
+                break
+            
+            print(f"\n🔄 Checking appointments at {current_time.strftime('%H:%M')} (session age: {session_age/60:.1f}min)")
+            
+            # Check for appointments
+            try:
+                if check_appointments_only(driver):
+                    print("✅ Appointment check completed")
+                else:
+                    print("❌ Session may have expired, breaking loop")
+                    break
+            except Exception as e:
+                # Extract just the main error message without stack trace
+                error_message = str(e)
+                if "Message:" in error_message:
+                    main_message = error_message.split("Message:")[1].split("(Session info:")[0].strip()
+                    print(f"❌ Error during appointment check: {main_message}")
+                else:
+                    print(f"❌ Error during appointment check: {error_message}")
+                
+                # If it's a connection/network error, try to continue
+                if "timeout" in error_message.lower() or "connection" in error_message.lower():
+                    print("🔄 Network error detected, will retry on next check...")
+                    continue
+                else:
+                    print("❌ Breaking loop due to error")
+                    break
+            
+            # Wait for next check
+            print(f"⏳ Waiting {check_interval} seconds until next check...")
+            time.sleep(check_interval)
+            
+    except KeyboardInterrupt:
+        print("\n🛑 Interrupted by user")
+    except Exception as e:
+        error_msg = f"❌ Error in persistent session: {e}"
+        print(error_msg)
+    finally:
+        # Clean up
+        if driver:
+            try:
+                print("🔚 Closing browser...")
+                driver.quit()
+                print("✅ Browser closed successfully")
+            except Exception as e:
+                print(f"⚠️ Error closing driver: {e}")
+                try:
+                    import subprocess
+                    subprocess.run(["pkill", "-f", "chrome"], check=False)
+                    print("🧹 Killed remaining Chrome processes")
+                except:
+                    pass
+
 def is_date_acceptable(appointment_date_str):
     """
     Check if the appointment date meets our criteria.
@@ -253,8 +554,6 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
     This should work exactly like the UI does.
     """
     try:
-        #print("🌐 Making API call via JavaScript fetch...")
-        
         # Execute JavaScript to make the API call in the browser context
         js_code = f"""
         var xhr = new XMLHttpRequest();
@@ -277,7 +576,6 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         """
         
         result = driver.execute_script(js_code)
-        # print(f"🌐 JavaScript API call result: {result}")
         return result
         
     except Exception as e:
@@ -484,7 +782,8 @@ def create_driver():
 
 
 if __name__ == "__main__":
-
+    # Run the persistent session automation (keeps browser open, checks in loop)
+    main_persistent_session()
     
-    # Run the main Selenium automation
-    main()
+    # Uncomment one of the lines below to use different versions:
+    # main()  # Original version (login every time)

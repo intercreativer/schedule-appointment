@@ -235,7 +235,7 @@ def check_session_validity(driver):
             print("🔍 Session invalid: API call returned null")
             return False
         else:
-            print("🔍 Session valid: API call successful")
+            # print("🔍 Session valid: API call successful")
             return True
         
     except Exception as e:
@@ -246,7 +246,7 @@ def main_persistent_session():
     """Main function that keeps browser open and checks appointments in a loop."""
     driver = None
     session_start_time = datetime.now()
-    check_interval = 60  # Check every 60 seconds (1 minute)
+    check_interval = 30  # Check every 60 seconds (1 minute)
     max_session_age = 120 * 60  # 25 minutes (quit before 30 min expiration) 
     
     try:
@@ -277,9 +277,9 @@ def main_persistent_session():
             
             # Check for appointments
             try:
-                if check_appointments_only(driver):
-                    print("✅ Appointment check completed")
-                else:
+                if not check_appointments_only(driver):
+                #     print("✅ Appointment check completed")
+                # else:
                     print("❌ Session may have expired, breaking loop")
                     break
             except Exception as e:
@@ -300,7 +300,7 @@ def main_persistent_session():
                     break
             
             # Wait for next check
-            print(f"⏳ Waiting {check_interval} seconds until next check...")
+            # print(f"⏳ Waiting {check_interval} seconds until next check...")
             time.sleep(check_interval)
             
     except KeyboardInterrupt:

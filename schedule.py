@@ -2,6 +2,7 @@ import os
 import requests
 import time
 import json
+import random
 from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -246,8 +247,10 @@ def main_persistent_session():
     """Main function that keeps browser open and checks appointments in a loop."""
     driver = None
     session_start_time = datetime.now()
-    check_interval = 30  # Check every 60 seconds (1 minute)
-    max_session_age = 120 * 60  # 25 minutes (quit before 30 min expiration) 
+    check_interval = 15  # Check every 5 minutes (300 seconds) to avoid rate limiting
+    max_session_age = 60 * 60  # 45 minutes (conservative estimate)
+    consecutive_failures = 0
+    max_consecutive_failures = 3 
     
     try:
         # Login once
@@ -260,8 +263,9 @@ def main_persistent_session():
             return
         
         print("✅ Login successful! Starting appointment monitoring loop...")
-        print(f"🔄 Will check every {check_interval} seconds")
+        print(f"🔄 Will check every {check_interval} seconds to avoid rate limiting")
         print(f"⏰ Will quit after {max_session_age/60:.0f} minutes to avoid session expiration")
+        print(f"🛡️ Rate limiting protection: max {max_consecutive_failures} consecutive failures")
         
         # Main monitoring loop
         while True:
@@ -278,11 +282,20 @@ def main_persistent_session():
             # Check for appointments
             try:
                 if not check_appointments_only(driver):
-                #     print("✅ Appointment check completed")
-                # else:
-                    print("❌ Session may have expired, breaking loop")
-                    break
+                    consecutive_failures += 1
+                    print(f"❌ Session may have expired (failure #{consecutive_failures}/{max_consecutive_failures})")
+                    
+                    if consecutive_failures >= max_consecutive_failures:
+                        print("❌ Too many consecutive failures, breaking loop")
+                        break
+                    else:
+                        print("🔄 Will retry on next check...")
+                else:
+                    # Reset failure counter on successful check
+                    consecutive_failures = 0
+                    
             except Exception as e:
+                consecutive_failures += 1
                 # Extract just the main error message without stack trace
                 error_message = str(e)
                 if "Message:" in error_message:
@@ -291,17 +304,26 @@ def main_persistent_session():
                 else:
                     print(f"❌ Error during appointment check: {error_message}")
                 
+                print(f"🔄 Error #{consecutive_failures}/{max_consecutive_failures}")
+                
                 # If it's a connection/network error, try to continue
                 if "timeout" in error_message.lower() or "connection" in error_message.lower():
                     print("🔄 Network error detected, will retry on next check...")
+                    if consecutive_failures >= max_consecutive_failures:
+                        print("❌ Too many consecutive failures, breaking loop")
+                        break
                     continue
                 else:
-                    print("❌ Breaking loop due to error")
-                    break
+                    if consecutive_failures >= max_consecutive_failures:
+                        print("❌ Too many consecutive failures, breaking loop")
+                        break
+                    print("🔄 Will retry on next check...")
             
-            # Wait for next check
-            # print(f"⏳ Waiting {check_interval} seconds until next check...")
-            time.sleep(check_interval)
+            # Wait for next check with some randomness to avoid predictable patterns
+            random_delay = random.uniform(0, 30)  # Add 0-60 seconds of randomness
+            total_delay = check_interval + random_delay
+            print(f"⏳ Waiting {total_delay:.0f} seconds until next check...")
+            time.sleep(total_delay)
             
     except KeyboardInterrupt:
         print("\n🛑 Interrupted by user")
@@ -554,6 +576,10 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
     This should work exactly like the UI does.
     """
     try:
+        # Add random delay to avoid rate limiting (1-3 seconds)
+        delay = random.uniform(1, 3)
+        time.sleep(delay)
+        
         # Execute JavaScript to make the API call in the browser context
         js_code = f"""
         var xhr = new XMLHttpRequest();
@@ -562,7 +588,7 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
         xhr.send();
         
-        if (xhr.status === 200) {{
+        if (xhr.status === 200 || xhr.status === 304) {{
             try {{
                 return JSON.parse(xhr.responseText);
             }} catch (e) {{

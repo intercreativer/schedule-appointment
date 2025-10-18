@@ -227,17 +227,16 @@ def check_session_validity(driver):
             print("🔍 Session invalid: dropdown not found")
             return False
         
-        # Simple session check - just try to get available dates
-        result = get_available_dates_via_js(driver, facility_id="134", expedite="false")
+        # # Simple session check - just try to get available dates
+        # result = get_available_dates_via_js(driver, facility_id="134", expedite="false")
         
-        # For session validation, we just need to know if the API call worked
-        # Even an empty array [] means the session is valid
-        if result is None:
-            print("🔍 Session invalid: API call returned null")
-            return False
-        else:
-            # print("🔍 Session valid: API call successful")
-            return True
+        # # For session validation, we just need to know if the API call worked
+        # # Even an empty array [] means the session is valid
+        # if result is None:
+        #     print(f"🔍 Session might be invalid result: {result}")
+        #     return False
+        # else:
+        #     return True
         
     except Exception as e:
         print(f"🔍 Session check failed: {e}")
@@ -248,7 +247,7 @@ def main_persistent_session():
     driver = None
     session_start_time = datetime.now()
     check_interval = 15  # Check every 5 minutes (300 seconds) to avoid rate limiting
-    max_session_age = 60 * 60  # 45 minutes (conservative estimate)
+    max_session_age = 120 * 60  # 45 minutes (conservative estimate)
     consecutive_failures = 0
     max_consecutive_failures = 3 
     
@@ -576,27 +575,25 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
     This should work exactly like the UI does.
     """
     try:
-        # Add random delay to avoid rate limiting (1-3 seconds)
-        delay = random.uniform(1, 3)
-        time.sleep(delay)
-        
         # Execute JavaScript to make the API call in the browser context
         js_code = f"""
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment/days/{facility_id}.json?appointments[expedite]={expedite}', false);
-        xhr.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');
-        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-        xhr.send();
-        
-        if (xhr.status === 200 || xhr.status === 304) {{
-            try {{
-                return JSON.parse(xhr.responseText);
-            }} catch (e) {{
-                console.error('JSON parse error:', e);
+        try {{
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment/days/{facility_id}.json?appointments[expedite]={expedite}', false);
+            xhr.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.send();
+            
+            if (xhr.status === 200 || xhr.status === 304) {{
+                try {{
+                    return JSON.parse(xhr.responseText);
+                }} catch (e) {{
+                    return null;
+                }}
+            }} else {{
                 return null;
             }}
-        }} else {{
-            console.error('HTTP error:', xhr.status, xhr.responseText);
+        }} catch (e) {{
             return null;
         }}
         """
@@ -605,7 +602,7 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         return result
         
     except Exception as e:
-        print(f"❌ JavaScript API call failed: {e}")
+        # Clean error handling - just return None without logging
         return None
 
 def get_available_times_via_js(driver, facility_id="134", date="2025-12-18", expedite="false"):
@@ -622,34 +619,34 @@ def get_available_times_via_js(driver, facility_id="134", date="2025-12-18", exp
         list: Available times data or None if failed
     """
     try:
-        
         # Execute JavaScript to make the API call in the browser context
         js_code = f"""
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment/times/{facility_id}.json?date={date}&appointments[expedite]={expedite}', false);
-        xhr.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');
-        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-        xhr.send();
-        
-        if (xhr.status === 200) {{
-            try {{
-                return JSON.parse(xhr.responseText);
-            }} catch (e) {{
-                console.error('JSON parse error:', e);
+        try {{
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment/times/{facility_id}.json?date={date}&appointments[expedite]={expedite}', false);
+            xhr.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.send();
+            
+            if (xhr.status === 200 || xhr.status === 304) {{
+                try {{
+                    return JSON.parse(xhr.responseText);
+                }} catch (e) {{
+                    return null;
+                }}
+            }} else {{
                 return null;
             }}
-        }} else {{
-            console.error('HTTP error:', xhr.status, xhr.responseText);
+        }} catch (e) {{
             return null;
         }}
         """
         
         result = driver.execute_script(js_code)
-        print(f"🌐 Available times result: {result}")
         return result
         
     except Exception as e:
-        print(f"❌ JavaScript API call for times failed: {e}")
+        # Clean error handling - just return None without logging
         return None
 
 def schedule_appointment_via_js(driver, facility_id="134", date="2025-12-08", time="08:00"):

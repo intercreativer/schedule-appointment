@@ -367,7 +367,14 @@ def main_persistent_session():
             
             # Check for appointments
             try:
-                if not check_appointments_only(driver):
+                appointment_result = check_appointments_only(driver)
+                
+                # Check if session expired (401 response)
+                if appointment_result == 'SESSION_EXPIRED':
+                    print("🔐 Session expired (401) - quitting loop")
+                    break
+                
+                if not appointment_result:
                     consecutive_failures += 1
                     print(f"❌ Session may have expired (failure #{consecutive_failures}/{max_consecutive_failures})")
                     
@@ -708,6 +715,11 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         
         result = driver.execute_script(js_code)
         print(f"📊 API Result: {result}")
+        
+        # Handle 401 (session expired) - return special indicator
+        if result and isinstance(result, dict) and result.get('status') == 401:
+            print("🔐 Session expired (401) - returning session_expired indicator")
+            return 'SESSION_EXPIRED'
         
         # Return just the response data for compatibility with existing code
         if result and isinstance(result, dict) and 'response' in result:

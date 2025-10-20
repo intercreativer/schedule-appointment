@@ -716,9 +716,13 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         result = driver.execute_script(js_code)
         print(f"📊 API Result: {result}")
         
-        # Handle 401 (session expired) - return special indicator
-        if result and isinstance(result, dict) and result.get('status') == 401:
-            print("🔐 Session expired (401) - returning session_expired indicator")
+        # Handle 401 (session expired) and 0 (network error) - return special indicator
+        if result and isinstance(result, dict) and result.get('status') in [401, 0]:
+            status = result.get('status')
+            if status == 401:
+                print("🔐 Session expired (401) - returning session_expired indicator")
+            else:
+                print("🌐 Network error (0) - server might get down - returning session_expired indicator")
             return 'SESSION_EXPIRED'
         
         # Return just the response data for compatibility with existing code

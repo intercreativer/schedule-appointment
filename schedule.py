@@ -676,24 +676,44 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
             xhr.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');
             xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
             xhr.send();
-            console.log(xhr.status + ' api response: ' + xhr.responseText);
 
+            // Return both status and response data
+            var result = {{
+                status: xhr.status,
+                response: null,
+                success: false
+            }};
+            
             if (xhr.status === 200 || xhr.status === 304) {{
                 try {{
-                    return JSON.parse(xhr.responseText);
+                    result.response = JSON.parse(xhr.responseText);
+                    result.success = true;
                 }} catch (e) {{
-                    return null;
+                    result.response = xhr.responseText;
                 }}
             }} else {{
-                return null;
+                result.response = xhr.responseText;
             }}
+            
+            return result;
         }} catch (e) {{
-            return null;
+            return {{
+                status: 0,
+                response: null,
+                success: false,
+                error: e.toString()
+            }};
         }}
         """
         
         result = driver.execute_script(js_code)
-        return result
+        print(f"📊 API Result: {result}")
+        
+        # Return just the response data for compatibility with existing code
+        if result and isinstance(result, dict) and 'response' in result:
+            return result['response']
+        else:
+            return result
         
     except Exception as e:
         # Clean error handling - just return None without logging

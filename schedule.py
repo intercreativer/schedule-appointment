@@ -78,14 +78,72 @@ def login_and_setup_session(driver):
     wait = WebDriverWait(driver, 20)
     
     try:
+        # Check if page loaded properly
+        print(f"🔍 Current URL: {driver.current_url}")
+        print(f"🔍 Page title: {driver.title}")
+        
         # Wait for the OK modal to appear 
         try:
-            ok_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
-            )
-            ok_button.click() 
-        except Exception:
-            print(f"ℹ️ No OK modal appeared")
+            # First, let's see what buttons are actually on the page
+            print("🔍 Looking for buttons on the page...")
+            buttons = driver.find_elements(By.TAG_NAME, "button")
+            print(f"🔍 Found {len(buttons)} buttons on the page")
+            for i, button in enumerate(buttons[:3]):  # Show first 3 buttons
+                try:
+                    text = button.text.strip()
+                    classes = button.get_attribute('class')
+                    print(f"   Button {i+1}: text='{text}', classes='{classes}'")
+                except:
+                    print(f"   Button {i+1}: Could not get details")
+            
+            # Try multiple selectors for the OK button
+            ok_button = None
+            selectors_to_try = [
+                "//button[normalize-space()='OK']",
+                "//button[contains(text(), 'OK')]",
+                "//button[contains(@class, 'ui-button')]",
+                "//button[@type='button']"
+            ]
+            
+            for selector in selectors_to_try:
+                try:
+                    # Use shorter timeout for each selector attempt
+                    print(f"🔍 Trying selector: {selector}")
+                    ok_button = WebDriverWait(driver, 3).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    print(f"✅ Found OK button with selector: {selector}")
+                    break
+                except Exception as e:
+                    print(f"⚠️ Selector failed: {selector} - {str(e)[:50]}...")
+                    continue
+            
+            if ok_button:
+                ok_button.click() 
+                print("✅ OK modal clicked successfully")
+            else:
+                print(f"ℹ️ No OK modal found via Selenium - trying JavaScript approach")
+                # Try JavaScript click as fallback
+                try:
+                    driver.execute_script("""
+                        var buttons = document.querySelectorAll('button');
+                        for (var i = 0; i < buttons.length; i++) {
+                            var button = buttons[i];
+                            if (button.textContent.trim() === 'OK' || button.textContent.includes('OK')) {
+                                button.click();
+                                console.log('Clicked OK button via JavaScript');
+                                break;
+                            }
+                        }
+                    """)
+                    print("✅ OK button clicked via JavaScript")
+                except Exception as js_error:
+                    print(f"⚠️ JavaScript click failed: {js_error}")
+                    print(f"ℹ️ Continuing without OK button")
+                # Don't return False, just continue with login process
+                
+        except Exception as e:
+            print(f"ℹ️ No OK modal appeared: {e}")
             return False
 
         # Wait for the form fields
@@ -236,7 +294,7 @@ def check_session_validity(driver):
         #     print(f"🔍 Session might be invalid result: {result}")
         #     return False
         # else:
-        #     return True
+        return True
         
     except Exception as e:
         print(f"🔍 Session check failed: {e}")
@@ -255,12 +313,41 @@ def main_persistent_session():
         # Login once
         print(f"🔐 Starting persistent session at {session_start_time.strftime('%H:%M')}")
         driver = create_driver()
-        driver.get(URL2)
+        
+        # Add debugging for page load
+        print(f"🌐 Navigating to: {URL2}")
+        if not URL2:
+            print("❌ URL2 environment variable is not set!")
+            return
+        
+        try:
+            driver.get(URL2)
+            print(f"✅ Page loaded successfully")
+            print(f"🔍 Current URL: {driver.current_url}")
+            print(f"🔍 Page title: {driver.title}")
+            
+            # Give the page extra time to fully render
+            print("⏳ Waiting for page to fully render...")
+            time.sleep(3)  # Wait 3 seconds for JavaScript to finish loading
+            
+            # Wait for the page to be fully interactive
+            try:
+                WebDriverWait(driver, 10).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
+                )
+                print("✅ Page is fully loaded and interactive")
+            except Exception as wait_error:
+                print(f"⚠️ Page load wait failed: {wait_error}")
+                print("🔄 Continuing anyway...")
+            
+        except Exception as nav_error:
+            print(f"❌ Navigation failed: {nav_error}")
+            return
         
         if not login_and_setup_session(driver):
             print("❌ Login failed")
             return
-        
+    
         print("✅ Login successful! Starting appointment monitoring loop...")
         print(f"🔄 Will check every {check_interval} seconds to avoid rate limiting")
         print(f"⏰ Will quit after {max_session_age/60:.0f} minutes to avoid session expiration")
@@ -327,13 +414,19 @@ def main_persistent_session():
     except KeyboardInterrupt:
         print("\n🛑 Interrupted by user")
     except Exception as e:
-        error_msg = f"❌ Error in persistent session: {e}"
-        print(error_msg)
+        # Extract just the main error message without stack trace
+        error_message = str(e)
+        if "Message:" in error_message:
+            main_message = error_message.split("Message:")[1].split("(Session info:")[0].strip()
+            print(f"❌ Error in persistent session: {main_message}")
+        else:
+            print(f"❌ Error in persistent session: {error_message}")
     finally:
         # Clean up
         if driver:
             try:
                 print("🔚 Closing browser...")
+                input("Press Enter to close the browser...")
                 driver.quit()
                 print("✅ Browser closed successfully")
             except Exception as e:
@@ -583,7 +676,8 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
             xhr.setRequestHeader('Accept', 'application/json, text/javascript, */*; q=0.01');
             xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
             xhr.send();
-            
+            console.log(xhr.status + ' api response: ' + xhr.responseText);
+
             if (xhr.status === 200 || xhr.status === 304) {{
                 try {{
                     return JSON.parse(xhr.responseText);
@@ -689,7 +783,8 @@ def schedule_appointment_via_js(driver, facility_id="134", date="2025-12-08", ti
         var formData = 'authenticity_token={csrf_token}&confirmed_limit_message=1&use_consulate_appointment_capacity=true&appointments[consulate_appointment][facility_id]={facility_id}&appointments[consulate_appointment][date]={date}&appointments[consulate_appointment][time]={time}&commit=Schedule+Appointment';
         
         xhr.send(formData);
-        
+        console.log('api response status: ' + xhr.status);
+        console.log('api response text: ' + xhr.responseText);
         return {{
             status: xhr.status,
             responseText: xhr.responseText,
@@ -790,9 +885,9 @@ def create_driver():
     # Create the driver using Selenium Manager (automatically handles ChromeDriver)
     driver = webdriver.Chrome(options=options)
     
-    # Set timeouts
-    driver.set_page_load_timeout(30)
-    driver.implicitly_wait(10)
+    # Set timeouts - increased for slow page rendering
+    driver.set_page_load_timeout(60)  # 60 seconds for page load
+    driver.implicitly_wait(15)  # 15 seconds for element finding
 
     # Minimize the window so it doesn't block your screen
     # try:

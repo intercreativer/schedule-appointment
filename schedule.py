@@ -192,6 +192,14 @@ def check_appointments_only(driver):
         # Get available dates
         available_dates = get_available_dates_via_js(driver, facility_id="134", expedite="false")
         
+        # Check if session expired (401) or transient network error (0)
+        if available_dates == 'SESSION_EXPIRED':
+            print(f"🔐 Session expired detected at {now}")
+            return 'SESSION_EXPIRED'
+        if available_dates == 'NETWORK_ERROR':
+            print(f"🌐 Network error detected at {now}")
+            return 'NETWORK_ERROR'
+        
         if available_dates is not None and isinstance(available_dates, list) and len(available_dates) > 0:
             print(f"✅ Found {len(available_dates)} available date(s)")
             
@@ -254,8 +262,8 @@ def check_appointments_only(driver):
                 print("💡 All available dates either:")
                 print("   - Fall in the unacceptable period (Dec 20 - Jan 15)")
                 print("   - Have no available times")
-        else:
-            print(f"📭 No available dates found at {now}")
+        # else:
+        #     print(f"📭 No available dates found at {now}")
         
         return True
         
@@ -354,6 +362,7 @@ def main_persistent_session():
         print(f"🛡️ Rate limiting protection: max {max_consecutive_failures} consecutive failures")
         
         # Main monitoring loop
+        consecutive_network_errors = 0  # track status 0 errors
         while True:
             current_time = datetime.now()
             session_age = (current_time - session_start_time).total_seconds()
@@ -363,7 +372,7 @@ def main_persistent_session():
                 print(f"⏰ Session age: {session_age/60:.1f} minutes - quitting to avoid expiration")
                 break
             
-            print(f"\n🔄 Checking appointments at {current_time.strftime('%H:%M')} (session age: {session_age/60:.1f}min)")
+            print(f"\n🔄 Checking appointments at {current_time.strftime('%H:%M:%S')} (session age: {session_age/60:.1f}min)")
             
             # Check for appointments
             try:
@@ -373,6 +382,16 @@ def main_persistent_session():
                 if appointment_result == 'SESSION_EXPIRED':
                     print("🔐 Session expired (401) - quitting loop")
                     break
+                
+                # Handle transient network errors (status 0)
+                if appointment_result == 'NETWORK_ERROR':
+                    consecutive_network_errors += 1
+                    print(f"🌐 Network error (0) attempt {consecutive_network_errors}/3")
+                    if consecutive_network_errors >= 3:
+                        print("❌ 3 consecutive network errors - quitting loop")
+                        break
+                    # try again on next iteration without counting as general failure
+                    continue
                 
                 if not appointment_result:
                     consecutive_failures += 1
@@ -386,6 +405,7 @@ def main_persistent_session():
                 else:
                     # Reset failure counter on successful check
                     consecutive_failures = 0
+                    consecutive_network_errors = 0
                     
             except Exception as e:
                 consecutive_failures += 1
@@ -714,16 +734,19 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         """
         
         result = driver.execute_script(js_code)
-        print(f"📊 API Result: {result}")
+        now = datetime.now().strftime('%H:%M:%S')
+        print(f"📊 API Result: {result} at {now}")
         
-        # Handle 401 (session expired) and 0 (network error) - return special indicator
-        if result and isinstance(result, dict) and result.get('status') in [401, 0]:
+        # Handle 401 (session expired) and 0 (network error)
+        if result and isinstance(result, dict):
             status = result.get('status')
             if status == 401:
                 print("🔐 Session expired (401) - returning session_expired indicator")
-            else:
-                print("🌐 Network error (0) - server might get down - returning session_expired indicator")
-            return 'SESSION_EXPIRED'
+                return 'SESSION_EXPIRED'
+            if status == 0:
+                # Transient network failure; let caller decide retry policy
+                print("🌐 Network error (0) - treating as transient NETWORK_ERROR")
+                return 'NETWORK_ERROR'
         
         # Return just the response data for compatibility with existing code
         if result and isinstance(result, dict) and 'response' in result:
@@ -733,6 +756,7 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         
     except Exception as e:
         # Clean error handling - just return None without logging
+        print(f"❌ get_available_dates_via_js exception: {e}")
         return None
 
 def get_available_times_via_js(driver, facility_id="134", date="2025-12-18", expedite="false"):

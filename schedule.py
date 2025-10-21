@@ -78,24 +78,9 @@ def login_and_setup_session(driver):
     wait = WebDriverWait(driver, 20)
     
     try:
-        # Check if page loaded properly
-        print(f"🔍 Current URL: {driver.current_url}")
-        print(f"🔍 Page title: {driver.title}")
         
         # Wait for the OK modal to appear 
         try:
-            # First, let's see what buttons are actually on the page
-            print("🔍 Looking for buttons on the page...")
-            buttons = driver.find_elements(By.TAG_NAME, "button")
-            print(f"🔍 Found {len(buttons)} buttons on the page")
-            for i, button in enumerate(buttons[:3]):  # Show first 3 buttons
-                try:
-                    text = button.text.strip()
-                    classes = button.get_attribute('class')
-                    print(f"   Button {i+1}: text='{text}', classes='{classes}'")
-                except:
-                    print(f"   Button {i+1}: Could not get details")
-            
             # Try multiple selectors for the OK button
             ok_button = None
             selectors_to_try = [
@@ -108,7 +93,6 @@ def login_and_setup_session(driver):
             for selector in selectors_to_try:
                 try:
                     # Use shorter timeout for each selector attempt
-                    print(f"🔍 Trying selector: {selector}")
                     ok_button = WebDriverWait(driver, 3).until(
                         EC.element_to_be_clickable((By.XPATH, selector))
                     )
@@ -173,7 +157,6 @@ def login_and_setup_session(driver):
         select = Select(dropdown)
         select.select_by_visible_text("Astana")
         
-        print("✅ Login successful and Astana selected")
         return True
         
     except Exception as e:
@@ -322,20 +305,14 @@ def main_persistent_session():
         print(f"🔐 Starting persistent session at {session_start_time.strftime('%H:%M')}")
         driver = create_driver()
         
-        # Add debugging for page load
-        print(f"🌐 Navigating to: {URL2}")
         if not URL2:
             print("❌ URL2 environment variable is not set!")
             return
         
         try:
             driver.get(URL2)
-            print(f"✅ Page loaded successfully")
-            print(f"🔍 Current URL: {driver.current_url}")
-            print(f"🔍 Page title: {driver.title}")
             
             # Give the page extra time to fully render
-            print("⏳ Waiting for page to fully render...")
             time.sleep(3)  # Wait 3 seconds for JavaScript to finish loading
             
             # Wait for the page to be fully interactive
@@ -343,7 +320,6 @@ def main_persistent_session():
                 WebDriverWait(driver, 10).until(
                     lambda d: d.execute_script("return document.readyState") == "complete"
                 )
-                print("✅ Page is fully loaded and interactive")
             except Exception as wait_error:
                 print(f"⚠️ Page load wait failed: {wait_error}")
                 print("🔄 Continuing anyway...")
@@ -356,9 +332,7 @@ def main_persistent_session():
             print("❌ Login failed")
             return
     
-        print("✅ Login successful! Starting appointment monitoring loop...")
-        print(f"🔄 Will check every {check_interval} seconds to avoid rate limiting")
-        print(f"⏰ Will quit after {max_session_age/60:.0f} minutes to avoid session expiration")
+        print(f"🔄 Will check every {check_interval} seconds. Will quit after {max_session_age/60:.0f} minutes")
         print(f"🛡️ Rate limiting protection: max {max_consecutive_failures} consecutive failures")
         
         # Main monitoring loop

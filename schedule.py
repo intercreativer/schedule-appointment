@@ -324,7 +324,13 @@ def main_persistent_session():
                 print("🔄 Continuing anyway...")
             
         except Exception as nav_error:
-            print(f"❌ Navigation failed: {nav_error}")
+            # Extract just the main error message without stack trace
+            error_message = str(nav_error)
+            if "Message:" in error_message:
+                main_message = error_message.split("Message:")[1].split("(Session info:")[0].strip()
+                print(f"❌ Navigation failed: {main_message}")
+            else:
+                print(f"❌ Navigation failed: {error_message}")
             return
         
         if not login_and_setup_session(driver):

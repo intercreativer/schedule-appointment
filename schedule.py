@@ -177,7 +177,6 @@ def check_appointments_only(driver):
         
         # Check if session expired (401) or transient network error (0)
         if available_dates == 'SESSION_EXPIRED':
-            print(f"🔐 Session expired detected at {now}")
             return 'SESSION_EXPIRED'
         if available_dates == 'NETWORK_ERROR':
             print(f"🌐 Network error detected at {now}")
@@ -408,7 +407,8 @@ def main_persistent_session():
             
             # Wait for next check with some randomness to avoid predictable patterns
             random_delay = random.uniform(0, 30)  # Add 0-60 seconds of randomness
-            total_delay = check_interval + random_delay
+            # total_delay = check_interval + random_delay
+            total_delay = check_interval
             print(f"⏳ Waiting {total_delay:.0f} seconds until next check...")
             time.sleep(total_delay)
             
@@ -715,7 +715,6 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         if result and isinstance(result, dict):
             status = result.get('status')
             if status == 401:
-                print("🔐 Session expired (401) - returning session_expired indicator")
                 return 'SESSION_EXPIRED'
             if status == 0:
                 # Transient network failure; let caller decide retry policy

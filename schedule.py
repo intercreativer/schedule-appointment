@@ -205,7 +205,6 @@ def check_appointments_only(driver):
         if available_dates == 'SESSION_EXPIRED':
             return 'SESSION_EXPIRED'
         if available_dates == 'NETWORK_ERROR':
-            log_warning(f"🌐 Network error detected at {now}")
             return 'NETWORK_ERROR'
         
         if available_dates is not None and isinstance(available_dates, list) and len(available_dates) > 0:
@@ -327,7 +326,7 @@ def main_persistent_session():
     
     try:
         # Login once
-        logging.info(f"🔐 Starting persistent session at {session_start_time.strftime('%H:%M')}")
+        logging.info(f"🔐 Starting persistent session")
         driver = create_driver()
         
         if not URL2:
@@ -377,8 +376,6 @@ def main_persistent_session():
                 log_info(f"⏰ Session age: {session_age/60:.1f} minutes - quitting to avoid expiration")
                 break
             
-            log_info(f"\n🔄 Checking appointments at {current_time.strftime('%H:%M:%S')} (session age: {session_age/60:.1f}min)")
-            
             # Check for appointments
             try:
                 appointment_result = check_appointments_only(driver)
@@ -391,10 +388,10 @@ def main_persistent_session():
                 # Handle transient network errors (status 0)
                 if appointment_result == 'NETWORK_ERROR':
                     consecutive_network_errors += 1
-                    log_warning(f"🌐 Network error (0) attempt {consecutive_network_errors}/3")
-                    if consecutive_network_errors >= 3:
-                        log_error("❌ 3 consecutive network errors - quitting loop")
-                        break
+                    log_warning(f"🌐 Network error (0) attempt {consecutive_network_errors}")
+                    # if consecutive_network_errors >= 3:
+                    #     log_error("❌ 3 consecutive network errors - quitting loop")
+                    #     break
                     # try again on next iteration without counting as general failure
                     continue
                 
@@ -402,11 +399,11 @@ def main_persistent_session():
                     consecutive_failures += 1
                     log_warning(f"❌ Session may have expired (failure #{consecutive_failures}/{max_consecutive_failures})")
                     
-                    if consecutive_failures >= max_consecutive_failures:
-                        log_error("❌ Too many consecutive failures, breaking loop")
-                        break
-                    else:
-                        log_info("🔄 Will retry on next check...")
+                    # if consecutive_failures >= max_consecutive_failures:
+                    #     log_error("❌ Too many consecutive failures, breaking loop")
+                    #     break
+                    # else:
+                    #     log_info("🔄 Will retry on next check...")
                 else:
                     # Reset failure counter on successful check
                     consecutive_failures = 0
@@ -441,7 +438,8 @@ def main_persistent_session():
             random_delay = random.uniform(0, 30)  # Add 0-60 seconds of randomness
             # total_delay = check_interval + random_delay
             total_delay = check_interval
-            log_info(f"⏳ Waiting {total_delay:.0f} seconds until next check...")
+            # log_info(f"⏰ session age: {session_age/60:.1f}min, waiting {total_delay:.0f} seconds until next check...")
+            log_info(f"⏰ session age: {session_age/60:.1f}min")
             time.sleep(total_delay)
             
     except KeyboardInterrupt:
@@ -741,7 +739,7 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
         
         result = driver.execute_script(js_code)
         now = datetime.now().strftime('%H:%M:%S')
-        log_info(f"📊 API Result: {result} at {now}")
+        log_info(f"📊 API Result: {result}")
         
         # Handle 401 (session expired) and 0 (network error)
         if result and isinstance(result, dict):
@@ -750,7 +748,6 @@ def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
                 return 'SESSION_EXPIRED'
             if status == 0:
                 # Transient network failure; let caller decide retry policy
-                log_warning("🌐 Network error (0) - treating as transient NETWORK_ERROR")
                 return 'NETWORK_ERROR'
         
         # Return just the response data for compatibility with existing code

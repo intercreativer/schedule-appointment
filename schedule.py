@@ -311,7 +311,7 @@ def main_persistent_session():
     check_interval = 15  # Check every 5 minutes (300 seconds) to avoid rate limiting
     max_session_age = 120 * 60  # 45 minutes (conservative estimate)
     consecutive_failures = 0
-    max_consecutive_failures = 3 
+    # max_consecutive_failures = 3 
     
     try:
         # Login once
@@ -352,7 +352,6 @@ def main_persistent_session():
             return
     
         log_info(f"🔄 Will check every {check_interval} seconds. Will quit after {max_session_age/60:.0f} minutes")
-        log_info(f"🛡️ Rate limiting protection: max {max_consecutive_failures} consecutive failures")
         
         # Main monitoring loop
         consecutive_network_errors = 0  # track status 0 errors
@@ -408,19 +407,19 @@ def main_persistent_session():
                 else:
                     log_error(f"❌ Error during appointment check: {error_message}")
                 
-                log_warning(f"🔄 Error #{consecutive_failures}/{max_consecutive_failures}")
+                log_warning(f"🔄 Error #{consecutive_failures}")
                 
                 # If it's a connection/network error, try to continue
                 if "timeout" in error_message.lower() or "connection" in error_message.lower():
                     log_info("🔄 Network error detected, will retry on next check...")
-                    if consecutive_failures >= max_consecutive_failures:
-                        log_error("❌ Too many consecutive failures, breaking loop")
-                        break
+                    # if consecutive_failures >= max_consecutive_failures:
+                    #     log_error("❌ Too many consecutive failures, breaking loop")
+                    #     break
                     continue
                 else:
-                    if consecutive_failures >= max_consecutive_failures:
-                        log_error("❌ Too many consecutive failures, breaking loop")
-                        break
+                    # if consecutive_failures >= max_consecutive_failures:
+                    #     log_error("❌ Too many consecutive failures, breaking loop")
+                    #     break
                     log_info("🔄 Will retry on next check...")
             
             # Wait for next check with some randomness to avoid predictable patterns
@@ -492,173 +491,228 @@ def is_date_acceptable(appointment_date_str):
         log_warning(f"⚠️ Could not parse date {appointment_date_str}: {e}")
         return False
 
-def main():
-    driver = None
-    now = datetime.now().strftime("%H:%M")
+def main_persistent_session():
+    """
+    Main persistent session that runs indefinitely until an appointment is scheduled.
+    Restarts browser session when it expires (401) or after 60 minutes.
+    """
+    session_start_time = datetime.now()
+    log_info(f"🔐 Starting persistent session at {session_start_time.strftime('%H:%M')}")
     
-    try:
-        driver = create_driver()  # Selenium Manager will locate ChromeDriver automatically
-        wait = WebDriverWait(driver, 20)
+    while True:  # Main loop - only exits when appointment is scheduled
+        driver = None
+        session_start = datetime.now()
         
-        #driver.get("https://ais.usvisa-info.com/en-kz/niv/users/sign_in")
-        driver.get(URL2)
-        #input("Browser is open. Inspect the modal, then press Enter to continue...")
-
-        # driver.save_screenshot("headless_debug.png")
-        # wait for the OK modal to appear 
         try:
-            ok_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
+            # Login and setup session
+            log_info("🚀 Starting new browser session...")
+            driver = create_driver()
+            wait = WebDriverWait(driver, 20)
+            
+            # Navigate to login page
+            driver.get(URL2)
+            log_info(f"🌐 Navigated to {URL2}")
+            
+            # Handle OK modal if it appears
+            try:
+                ok_button = wait.until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='OK']"))
+                )
+                ok_button.click()
+                log_info("✅ Clicked OK modal")
+            except Exception:
+                log_info("ℹ️ No OK modal appeared, continuing...")
+
+            # Login process
+            email_input = wait.until(EC.presence_of_element_located((By.ID, "user_email")))
+            password_input = driver.find_element(By.ID, "user_password")
+            
+            email_input.send_keys(EMAIL)
+            password_input.send_keys(PASSWORD)
+            
+            # Click policy checkbox
+            policy_wrapper = wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "div.icheckbox"))
             )
-            ok_button.click() 
-        except Exception:
-            log_info(f"ℹ️ No OK modal appeared at {now}")
-            driver.quit()
-            return  #                    
-
-        # Wait for the form fields
-        email_input = wait.until(EC.presence_of_element_located((By.ID, "user_email")))
-        password_input = driver.find_element(By.ID, "user_password")
-
-        # Fill in login details
-        email_input.send_keys(EMAIL)
-        password_input.send_keys(PASSWORD)
-
-        # ✅ Click the visible styled checkbox wrapper (not the hidden input)
-        policy_wrapper = wait.until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "div.icheckbox"))
-        )
-        policy_wrapper.click()
-
-        # # Optional: wait a moment after clicking (human-like pause)
-        # import time
-        # time.sleep(2)
-
-        # Click Sign In button
-        sign_in_button = driver.find_element(By.NAME, "commit")
-        sign_in_button.click()
-
-        # wait for dropdown and select Astana
-        try:
+            policy_wrapper.click()
+            
+            # Sign in
+            sign_in_button = driver.find_element(By.NAME, "commit")
+            sign_in_button.click()
+            log_info("🔐 Login completed")
+            
+            # Select Astana from dropdown
             dropdown = wait.until(
                 EC.presence_of_element_located((By.ID, "appointments_consulate_appointment_facility_id"))
             )
             select = Select(dropdown)
             select.select_by_visible_text("Astana")
+            log_info("🏛️ Selected Astana facility")
             
+            # Now start the checking loop for this session
+            appointment_scheduled = check_appointments_loop(driver, session_start)
             
-            # Try JavaScript approach first (browser-native fetch)
-            available_dates = get_available_dates_via_js(driver, facility_id="134", expedite="false")
-            
-            
-            if available_dates is not None:
-                # Check if we have actual dates (not just empty array)
-                if isinstance(available_dates, list) and len(available_dates) > 0:
-                    log_info(f"✅ Found {len(available_dates)} available date(s)")
-                    
-                    # Cycle through all available dates to find an acceptable one
-                    acceptable_date = None
-                    acceptable_time = None
-                    
-                    for date_info in available_dates:
-                        current_date = date_info['date']
-                        log_info(f"\n🔍 Checking date: {current_date}")
-                        
-                        # Check if this date is acceptable
-                        if is_date_acceptable(current_date):
-                            log_info(f"✅ Date {current_date} is acceptable, checking for available times...")
-                            
-                            # Get available times for this date
-                            available_times = get_available_times_via_js(driver, facility_id="134", date=current_date, expedite="false")
-                            
-                            if available_times is not None and isinstance(available_times, dict) and 'available_times' in available_times:
-                                times_list = available_times['available_times']
-                                if len(times_list) > 0:
-                                    log_info(f"⏰ Found {len(times_list)} available time(s) for {current_date}")
-                                    
-                                    # Get the last available time
-                                    last_time = times_list[-1]
-                                    log_info(f"⏰ Last available time: {last_time}")
-                                    
-                                    # This date and time are acceptable
-                                    acceptable_date = current_date
-                                    acceptable_time = last_time
-                                    break
-                                else:
-                                    log_info(f"⏰ No available times found for {current_date}")
-                            else:
-                                log_info(f"⏰ No available times found for {current_date}")
-                        else:
-                            log_info(f"❌ Date {current_date} is not acceptable, trying next date...")
-                    
-                    # If we found an acceptable date and time, schedule the appointment
-                    if acceptable_date and acceptable_time:
-                        log_info(f"\n🎯 Scheduling appointment for {acceptable_date} at {acceptable_time}")
-                        
-                        # Schedule the appointment
-                        schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=acceptable_date, time=acceptable_time)
-                        
-                        if schedule_result:
-                            log_info("✅ Appointment scheduled successfully!")
-                            telegram_message = f"🎉 APPOINTMENT SCHEDULED!\n\n"
-                            telegram_message += f"📅 Date: {acceptable_date}\n"
-                            telegram_message += f"⏰ Time: {acceptable_time}\n"
-                            telegram_message += f"🔍 Check the console output for details."
-                            send_telegram_message(telegram_message)
-                        else:
-                            log_error("❌ Failed to schedule appointment")
-                            telegram_message = f"❌ Failed to schedule appointment for {acceptable_date} at {acceptable_time}"
-                            send_telegram_message(telegram_message)
-                else:
-                    log_info(f"📭 No available dates found at {now}")
+            if appointment_scheduled:
+                log_info("🎉 Appointment scheduled! Exiting main loop.")
+                break
             else:
-                log_error(f"❌ API call failed at {now}")
+                log_info("🔄 Session ended, restarting...")
                 
-        except TimeoutException:
-            log_warning("⚠️ Dropdown not found (possible logout/session expired). quiting...")
-            driver.quit()
-            return  #
-            
-    except Exception as e:
-        # Extract just the main error message without stack trace
-        error_message = str(e)
-        if "Message:" in error_message:
-            # For Selenium errors, extract just the main message
-            main_message = error_message.split("Message:")[1].split("(Session info:")[0].strip()
-            error_msg = f"❌ Connection error at {now}: {main_message}"
-        else:
-            error_msg = f"❌ Connection error at {now}: {error_message}"
-        log_error(error_msg)
+        except Exception as e:
+            error_message = str(e)
+            if "Message:" in error_message:
+                main_message = error_message.split("Message:")[1].split("(Session info:")[0].strip()
+                log_error(f"❌ Session error: {main_message}")
+            else:
+                log_error(f"❌ Session error: {error_message}")
         
-        # Clean up driver if it exists
-        if driver:
-            try:
-                driver.quit()
-            except:
-                pass
-        return
-
-
-
-    finally:
-        #input("Browser is open. Inspect the modal, then press Enter to continue...")
-        # Optional: wait a moment after clicking (human-like pause)
-        time.sleep(2)
-        # input("🔎 Script finished. Press Enter to close the browser...")
-        
-        # Safely quit the driver
-        if driver:
-            try:
-                driver.quit()
-            except Exception as e:
-                log_warning(f"⚠️ Error closing driver: {e}")
-                # Force kill any remaining Chrome processes
+        finally:
+            # Clean up driver
+            if driver:
                 try:
-                    import subprocess
-                    subprocess.run(["pkill", "-f", "chrome"], check=False)
-                    log_info("🧹 Killed remaining Chrome processes")
-                except:
-                    pass
+                    driver.quit()
+                    log_info("🧹 Browser session closed")
+                except Exception as e:
+                    log_warning(f"⚠️ Error closing driver: {e}")
+                    try:
+                        import subprocess
+                        subprocess.run(["pkill", "-f", "chrome"], check=False)
+                        log_info("🧹 Killed remaining Chrome processes")
+                    except:
+                        pass
+
+
+def check_appointments_loop(driver, session_start):
+    """
+    Check for appointments in a loop until session expires or appointment is scheduled.
+    Returns True if appointment was scheduled, False if session ended.
+    """
+    check_interval = 15  # Check every 30 seconds
+    max_session_age = 60 * 60  # 60 minutes in seconds
+    consecutive_failures = 0
+    # max_consecutive_failures = 3
+    
+    while True:
+        current_time = datetime.now()
+        session_age = (current_time - session_start).total_seconds()
+        
+        # Check if session is too old (60 minutes)
+        if session_age > max_session_age:
+            log_info(f"⏰ Session age {session_age/60:.1f}min exceeded 60min limit, restarting...")
+            return False
+        
+        log_info(f"🔍 Checking appointments (session age: {session_age/60:.1f}min)")
+        
+        try:
+            # Check for appointments
+            appointment_result = check_appointments_only(driver)
+            
+            if appointment_result == 'SESSION_EXPIRED':
+                log_warning("🔐 Session expired (401), restarting...")
+                return False
+            elif appointment_result == 'NETWORK_ERROR':
+                log_warning("🌐 Network error, retrying...")
+                consecutive_failures += 1
+                # if consecutive_failures >= max_consecutive_failures:
+                #     log_error("❌ Too many network errors, restarting session...")
+                #     return False
+            elif appointment_result == True:
+                # Appointment was scheduled successfully
+                log_info("🎉 Appointment scheduled successfully!")
+                return True
+            else:
+                # No appointments found, reset failure counter
+                consecutive_failures = 0
+                # log_info("📭 No appointments available, continuing to check...")
+                
+        except Exception as e:
+            consecutive_failures += 1
+            log_error(f"❌ Error checking appointments: {e}")
+            
+            # if consecutive_failures >= max_consecutive_failures:
+            #     log_error("❌ Too many consecutive failures, restarting session...")
+            #     return False
+        
+        # Wait before next check
+        # log_info(f"⏳ Waiting {check_interval} seconds until next check...")
+        time.sleep(check_interval)
+
+
+def check_appointments_only(driver):
+    """
+    Check for appointments without re-logging in.
+    Returns True if appointment scheduled, False if no appointments, 
+    'SESSION_EXPIRED' if 401, 'NETWORK_ERROR' if network issues.
+    """
+    try:
+        # Get available dates
+        available_dates = get_available_dates_via_js(driver, facility_id="134", expedite="false")
+        
+        if available_dates == 'SESSION_EXPIRED':
+            return 'SESSION_EXPIRED'
+        if available_dates == 'NETWORK_ERROR':
+            return 'NETWORK_ERROR'
+        
+        if available_dates is not None and isinstance(available_dates, list) and len(available_dates) > 0:
+            log_info(f"✅ Found {len(available_dates)} available date(s)")
+            
+            # Find acceptable date and time
+            for date_info in available_dates:
+                current_date = date_info['date']
+                log_info(f"🔍 Checking date: {current_date}")
+                
+                if is_date_acceptable(current_date):
+                    log_info(f"✅ Date {current_date} is acceptable, checking times...")
+                    
+                    # Get available times
+                    available_times = get_available_times_via_js(driver, facility_id="134", date=current_date, expedite="false")
+                    
+                    if available_times == 'SESSION_EXPIRED':
+                        return 'SESSION_EXPIRED'
+                    if available_times == 'NETWORK_ERROR':
+                        return 'NETWORK_ERROR'
+                    
+                    if available_times and isinstance(available_times, dict) and 'available_times' in available_times:
+                        times_list = available_times['available_times']
+                        if len(times_list) > 0:
+                            last_time = times_list[-1]
+                            log_info(f"⏰ Found time: {last_time}")
+                            
+                            # Schedule the appointment
+                            log_info(f"🎯 Scheduling appointment for {current_date} at {last_time}")
+                            schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=current_date, time=last_time)
+                            
+                            if schedule_result:
+                                log_info("✅ Appointment scheduled successfully!")
+                                telegram_message = f"🎉 APPOINTMENT SCHEDULED!\n\n"
+                                telegram_message += f"📅 Date: {current_date}\n"
+                                telegram_message += f"⏰ Time: {last_time}\n"
+                                send_telegram_message(telegram_message)
+                                return True
+                            else:
+                                log_error("❌ Failed to schedule appointment")
+                                return False
+                        else:
+                            log_info(f"⏰ No times available for {current_date}")
+                    else:
+                        log_info(f"⏰ No times available for {current_date}")
+                else:
+                    log_info(f"❌ Date {current_date} not acceptable")
+        # else:
+        #     log_info("📭 No available dates found")
+            
+        return False
+        
+    except Exception as e:
+        log_error(f"❌ Error in check_appointments_only: {e}")
+        return False
+
+
+def main():
+    """
+    Legacy main function - now just calls the persistent session.
+    """
+    main_persistent_session()
 
 def send_html_to_telegram(driver, filename="page.html"):
     # get full page source

@@ -269,8 +269,6 @@ def check_appointments_only(driver):
                 log_info("💡 All available dates either:")
                 log_info("   - Fall in the unacceptable period (Dec 20 - Jan 15)")
                 log_info("   - Have no available times")
-        # else:
-        #     print(f"📭 No available dates found at {now}")
         
         return True
         
@@ -300,15 +298,6 @@ def check_session_validity(driver):
             log_warning("🔍 Session invalid: dropdown not found")
             return False
         
-        # # Simple session check - just try to get available dates
-        # result = get_available_dates_via_js(driver, facility_id="134", expedite="false")
-        
-        # # For session validation, we just need to know if the API call worked
-        # # Even an empty array [] means the session is valid
-        # if result is None:
-        #     print(f"🔍 Session might be invalid result: {result}")
-        #     return False
-        # else:
         return True
         
     except Exception as e:
@@ -457,7 +446,7 @@ def main_persistent_session():
         if driver:
             try:
                 log_info("🔚 Closing browser...")
-                input("Press Enter to close the browser...")
+                # input("Press Enter to close the browser...")
                 driver.quit()
                 log_info("✅ Browser closed successfully")
             except Exception as e:
@@ -493,14 +482,14 @@ def is_date_acceptable(appointment_date_str):
         
         # Check if the appointment date falls in the unacceptable period
         if start_date <= appointment_date <= end_date:
-            print(f"❌ Date {appointment_date_str} falls in unacceptable period (Dec 20 - Jan 15")
+            log_info(f"❌ Date {appointment_date_str} falls in unacceptable period (Dec 20 - Jan 15")
             return False
         else:
-            print(f"✅ Date {appointment_date_str} is acceptable")
+            log_info(f"✅ Date {appointment_date_str} is acceptable")
             return True
             
     except ValueError as e:
-        print(f"⚠️ Could not parse date {appointment_date_str}: {e}")
+        log_warning(f"⚠️ Could not parse date {appointment_date_str}: {e}")
         return False
 
 def main():
@@ -510,8 +499,6 @@ def main():
     try:
         driver = create_driver()  # Selenium Manager will locate ChromeDriver automatically
         wait = WebDriverWait(driver, 20)
-        
-        # print(f"🔄 Starting automation at {now}")
         
         #driver.get("https://ais.usvisa-info.com/en-kz/niv/users/sign_in")
         driver.get(URL2)
@@ -525,7 +512,7 @@ def main():
             )
             ok_button.click() 
         except Exception:
-            print(f"ℹ️ No OK modal appeared at {now}")
+            log_info(f"ℹ️ No OK modal appeared at {now}")
             driver.quit()
             return  #                    
 
@@ -567,7 +554,7 @@ def main():
             if available_dates is not None:
                 # Check if we have actual dates (not just empty array)
                 if isinstance(available_dates, list) and len(available_dates) > 0:
-                    print(f"✅ Found {len(available_dates)} available date(s)")
+                    log_info(f"✅ Found {len(available_dates)} available date(s)")
                     
                     # Cycle through all available dates to find an acceptable one
                     acceptable_date = None
@@ -575,11 +562,11 @@ def main():
                     
                     for date_info in available_dates:
                         current_date = date_info['date']
-                        print(f"\n🔍 Checking date: {current_date}")
+                        log_info(f"\n🔍 Checking date: {current_date}")
                         
                         # Check if this date is acceptable
                         if is_date_acceptable(current_date):
-                            print(f"✅ Date {current_date} is acceptable, checking for available times...")
+                            log_info(f"✅ Date {current_date} is acceptable, checking for available times...")
                             
                             # Get available times for this date
                             available_times = get_available_times_via_js(driver, facility_id="134", date=current_date, expedite="false")
@@ -587,48 +574,48 @@ def main():
                             if available_times is not None and isinstance(available_times, dict) and 'available_times' in available_times:
                                 times_list = available_times['available_times']
                                 if len(times_list) > 0:
-                                    print(f"⏰ Found {len(times_list)} available time(s) for {current_date}")
+                                    log_info(f"⏰ Found {len(times_list)} available time(s) for {current_date}")
                                     
                                     # Get the last available time
                                     last_time = times_list[-1]
-                                    print(f"⏰ Last available time: {last_time}")
+                                    log_info(f"⏰ Last available time: {last_time}")
                                     
                                     # This date and time are acceptable
                                     acceptable_date = current_date
                                     acceptable_time = last_time
                                     break
                                 else:
-                                    print(f"⏰ No available times found for {current_date}")
+                                    log_info(f"⏰ No available times found for {current_date}")
                             else:
-                                print(f"⏰ No available times found for {current_date}")
+                                log_info(f"⏰ No available times found for {current_date}")
                         else:
-                            print(f"❌ Date {current_date} is not acceptable, trying next date...")
+                            log_info(f"❌ Date {current_date} is not acceptable, trying next date...")
                     
                     # If we found an acceptable date and time, schedule the appointment
                     if acceptable_date and acceptable_time:
-                        print(f"\n🎯 Scheduling appointment for {acceptable_date} at {acceptable_time}")
+                        log_info(f"\n🎯 Scheduling appointment for {acceptable_date} at {acceptable_time}")
                         
                         # Schedule the appointment
                         schedule_result = schedule_appointment_via_js(driver, facility_id="134", date=acceptable_date, time=acceptable_time)
                         
                         if schedule_result:
-                            print("✅ Appointment scheduled successfully!")
+                            log_info("✅ Appointment scheduled successfully!")
                             telegram_message = f"🎉 APPOINTMENT SCHEDULED!\n\n"
                             telegram_message += f"📅 Date: {acceptable_date}\n"
                             telegram_message += f"⏰ Time: {acceptable_time}\n"
                             telegram_message += f"🔍 Check the console output for details."
                             send_telegram_message(telegram_message)
                         else:
-                            print("❌ Failed to schedule appointment")
+                            log_error("❌ Failed to schedule appointment")
                             telegram_message = f"❌ Failed to schedule appointment for {acceptable_date} at {acceptable_time}"
                             send_telegram_message(telegram_message)
                 else:
-                    print(f"📭 No available dates found at {now}")
+                    log_info(f"📭 No available dates found at {now}")
             else:
-                print(f"❌ API call failed at {now}")
+                log_error(f"❌ API call failed at {now}")
                 
         except TimeoutException:
-            print("⚠️ Dropdown not found (possible logout/session expired). quiting...")
+            log_warning("⚠️ Dropdown not found (possible logout/session expired). quiting...")
             driver.quit()
             return  #
             
@@ -641,7 +628,7 @@ def main():
             error_msg = f"❌ Connection error at {now}: {main_message}"
         else:
             error_msg = f"❌ Connection error at {now}: {error_message}"
-        print(error_msg)
+        log_error(error_msg)
         
         # Clean up driver if it exists
         if driver:
@@ -663,14 +650,13 @@ def main():
         if driver:
             try:
                 driver.quit()
-                # print("✅ Driver closed successfully")
             except Exception as e:
-                print(f"⚠️ Error closing driver: {e}")
+                log_warning(f"⚠️ Error closing driver: {e}")
                 # Force kill any remaining Chrome processes
                 try:
                     import subprocess
                     subprocess.run(["pkill", "-f", "chrome"], check=False)
-                    print("🧹 Killed remaining Chrome processes")
+                    log_info("🧹 Killed remaining Chrome processes")
                 except:
                     pass
 
@@ -688,9 +674,9 @@ def send_html_to_telegram(driver, filename="page.html"):
         response = requests.post(url, data={"chat_id": CHAT_ID}, files={"document": f})
 
     if response.status_code == 200:
-        print("📄 Sent page HTML to Telegram successfully!")
+        log_info("📄 Sent page HTML to Telegram successfully!")
     else:
-        print(f"⚠️ Failed to send HTML: {response.text}")
+        log_warning(f"⚠️ Failed to send HTML: {response.text}")
 
 
 def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
@@ -819,16 +805,16 @@ def schedule_appointment_via_js(driver, facility_id="134", date="2025-12-08", ti
         bool: True if successful, False otherwise
     """
     try:
-        print(f"📝 Scheduling appointment for {date} at {time}")
+        log_info(f"📝 Scheduling appointment for {date} at {time}")
         
         # Get CSRF token from the page
         csrf_token = None
         try:
             csrf_meta = driver.find_element(By.CSS_SELECTOR, 'meta[name="csrf-token"]')
             csrf_token = csrf_meta.get_attribute('content')
-            print(f"🔐 Using CSRF token: {csrf_token[:20]}...")
+            log_info(f"🔐 Using CSRF token: {csrf_token[:20]}...")
         except Exception as e:
-            print(f"⚠️ Could not extract CSRF token: {e}")
+            log_warning(f"⚠️ Could not extract CSRF token: {e}")
             return False
         
         # Execute JavaScript to make the POST request
@@ -856,38 +842,38 @@ def schedule_appointment_via_js(driver, facility_id="134", date="2025-12-08", ti
         """
         
         result = driver.execute_script(js_code)
-        print(f"📊 Schedule response status: {result['status']}")
-        print(f"📊 Final URL: {result['finalUrl']}")
-        print(f"📊 Response headers: {result['headers']}")
+        log_info(f"📊 Schedule response status: {result['status']}")
+        log_info(f"📊 Final URL: {result['finalUrl']}")
+        log_info(f"📊 Response headers: {result['headers']}")
         
         # Debug: Check current page URL and cookies
         current_url = driver.current_url
-        print(f"🌐 Current page URL: {current_url}")
+        log_info(f"🌐 Current page URL: {current_url}")
         
         # Check if we're still logged in by looking for logout link or user info
         try:
             logout_element = driver.find_element(By.CSS_SELECTOR, "a[href*='sign_out']")
-            print("✅ Still logged in (logout link found)")
+            log_info("✅ Still logged in (logout link found)")
         except:
-            print("❌ Not logged in (no logout link found)")
+            log_warning("❌ Not logged in (no logout link found)")
         
         if result['status'] in [200, 302]:
             # Save the response HTML to file
             with open("appointment_result.html", "w", encoding="utf-8") as f:
                 f.write(result['responseText'])
-            print("💾 Appointment result saved to appointment_result.html")
+            log_info("💾 Appointment result saved to appointment_result.html")
             
             # Send the HTML file via Telegram
             send_html_to_telegram(driver, "appointment_result.html")
             
             return True
         else:
-            print(f"❌ Schedule request failed with status {result['status']}")
-            print(f"📄 Response: {result['responseText'][:500]}...")
+            log_error(f"❌ Schedule request failed with status {result['status']}")
+            log_error(f"📄 Response: {result['responseText'][:500]}...")
             return False
             
     except Exception as e:
-        print(f"❌ Error scheduling appointment: {e}")
+        log_error(f"❌ Error scheduling appointment: {e}")
         return False
 
 
@@ -901,11 +887,11 @@ def send_telegram_message(message: str):
     try:
         response = requests.post(url, data=payload)
         if response.status_code == 200:
-            print("📩 Telegram message sent successfully!")
+            log_info("📩 Telegram message sent successfully!")
         else:
-            print(f"⚠️ Failed to send message: {response.text}")
+            log_warning(f"⚠️ Failed to send message: {response.text}")
     except Exception as e:
-        print(f"⚠️ Error sending message: {e}")
+        log_warning(f"⚠️ Error sending message: {e}")
 
 
 
@@ -956,7 +942,6 @@ def create_driver():
     #     driver.minimize_window()
     # except Exception as e:
     #     # On some platforms/minor driver versions minimize might throw — ignore safely
-    #     print(f"⚠️ Could not minimize window: {e}")
 
     return driver
 

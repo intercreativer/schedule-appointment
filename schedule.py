@@ -563,15 +563,25 @@ def main_persistent_session():
             if "Message:" in error_message:
                 main_message = error_message.split("Message:")[1].split("(Session info:")[0].strip()
                 log_error(f"❌ Session error: {main_message}")
+                
+                # Check if it's a connection error that needs a delay
+                if "ERR_CONNECTION_REFUSED" in main_message or "ERR_CONNECTION_RESET" in main_message or "timeout" in main_message.lower():
+                    log_info("⏳ Connection error detected, waiting 5 minutes before retry...")
+                    time.sleep(300)  # Wait 5 minutes before retrying
             else:
                 log_error(f"❌ Session error: {error_message}")
+                
+                # # Check if it's a connection error that needs a delay
+                # if "connection" in error_message.lower() or "timeout" in error_message.lower():
+                #     log_info("⏳ Connection error detected, waiting 60 seconds before retry...")
+                #     time.sleep(60)  # Wait 1 minute before retrying
         
         finally:
             # Clean up driver
             if driver:
                 try:
                     driver.quit()
-                    log_info("🧹 Browser session closed")
+                    # log_info("🧹 Browser session closed")
                 except Exception as e:
                     log_warning(f"⚠️ Error closing driver: {e}")
                     try:

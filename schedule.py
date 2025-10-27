@@ -50,54 +50,6 @@ def log_warning(message):
     """Log warning message to both file and console"""
     logging.warning(message)
 
-class SessionManager:
-    def __init__(self):
-        self.driver = None
-        self.session_start_time = None
-        self.last_check_time = None
-        self.session_file = "session_info.json"
-        
-    def load_session_info(self):
-        """Load session info from file if it exists."""
-        try:
-            if os.path.exists(self.session_file):
-                with open(self.session_file, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            log_warning(f"⚠️ Could not load session info: {e}")
-        return None
-    
-    def save_session_info(self, session_info):
-        """Save session info to file."""
-        try:
-            with open(self.session_file, 'w') as f:
-                json.dump(session_info, f, indent=2)
-        except Exception as e:
-            log_warning(f"⚠️ Could not save session info: {e}")
-    
-    def is_session_expired(self, max_age_minutes=30):
-        """Check if session should be considered expired based on age."""
-        if not self.session_start_time:
-            return True
-        
-        session_age = datetime.now() - self.session_start_time
-        return session_age.total_seconds() > (max_age_minutes * 60)
-    
-    def should_renew_session(self):
-        """Determine if we should renew the session."""
-        # Check if session is too old
-        if self.is_session_expired():
-            log_info(f"🕐 Session expired (older than 30 minutes)")
-            return True
-        
-        # Check if we haven't checked in a while
-        if self.last_check_time:
-            time_since_check = datetime.now() - self.last_check_time
-            if time_since_check.total_seconds() > (5 * 60):  # 5 minutes
-                log_info(f"🕐 Haven't checked session in {time_since_check.total_seconds()/60:.1f} minutes")
-                return True
-        
-        return False
 
 def login_and_setup_session(driver):
     """Handle the login process and return True if successful."""

@@ -19,16 +19,40 @@ from selenium.webdriver.support import expected_conditions as EC
 load_dotenv()
 
 # Setup logging to file with yymmdd.log format
-log_filename = datetime.now().strftime("%y%m%d.log")
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(message)s',
-    datefmt='%H:%M:%S',  # Only time, no date (date is in filename)
-    handlers=[
-        logging.FileHandler(log_filename),
-        logging.StreamHandler()  # Also print to console
-    ]
-)
+def setup_logging():
+    """Setup logging with current date filename"""
+    log_filename = datetime.now().strftime("%y%m%d.log")
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(message)s',
+        datefmt='%H:%M:%S',  # Only time, no date (date is in filename)
+        handlers=[
+            logging.FileHandler(log_filename),
+            logging.StreamHandler()  # Also print to console
+        ]
+    )
+    return log_filename
+
+def check_and_rotate_log():
+    """Check if we need to rotate to a new log file for a new day"""
+    current_date_log = datetime.now().strftime("%y%m%d.log")
+    
+    # Get the current log file from the first file handler
+    for handler in logging.getLogger().handlers:
+        if isinstance(handler, logging.FileHandler):
+            current_log_file = handler.baseFilename
+            if not current_log_file.endswith(current_date_log):
+                log_info(f"📅 New day detected! Rotating from {os.path.basename(current_log_file)} to {current_date_log}")
+                
+                # Remove old handlers
+                logging.getLogger().handlers.clear()
+                
+                # Setup new logging with new date
+                setup_logging()
+                break
+
+# Initial logging setup
+current_log_file = setup_logging()
 
 EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
@@ -561,6 +585,8 @@ def check_appointments_loop(driver, session_start):
         # Check if session is too old (60 minutes)
         if session_age > max_session_age:
             log_info(f"⏰ Session age {session_age/60:.1f}min exceeded 60min limit, restarting...")
+            # Check if we need to rotate log file for new day
+            check_and_rotate_log()
             return False
         
         log_info(f"🔍 Checking appointments (session age: {session_age/60:.1f}min)")

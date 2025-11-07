@@ -12,6 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from datetime import datetime, date
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
@@ -361,7 +362,7 @@ def main_persistent_session():
                 
                 if not appointment_result:
                     consecutive_failures += 1
-                    log_warning(f"❌ Session may have expired (failure #{consecutive_failures}/{max_consecutive_failures})")
+                    log_warning(f"❌ Session may have expired (failure #{consecutive_failures})")
                     
                     # if consecutive_failures >= max_consecutive_failures:
                     #     log_error("❌ Too many consecutive failures, breaking loop")
@@ -972,8 +973,10 @@ def create_driver():
     options.add_argument('--disable-logging')
     options.add_argument('--log-level=3')
 
-    # Create the driver using Selenium Manager (automatically handles ChromeDriver)
-    driver = webdriver.Chrome(options=options)
+    # Create the driver using webdriver-manager to automatically handle ChromeDriver version matching
+    # This will ignore the outdated driver in PATH and download the correct version
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
     
     # Set timeouts - increased for slow page rendering
     driver.set_page_load_timeout(60)  # 60 seconds for page load

@@ -387,7 +387,7 @@ def get_available_dates_via_http(driver, facility_id="134", expedite="false"):
         response = requests.get(url, headers=headers, cookies=cookies_dict, timeout=30)
         
         # Log the response status
-        log_info(f"📊 API Response Status: {response.status_code}")
+        log_info(f"📊 API Response: {response.status_code} {response.text}")
         
         # Handle 401 (session expired)
         if response.status_code == 401:

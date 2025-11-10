@@ -272,7 +272,7 @@ def check_appointments_only(driver):
     """
     try:
         # Get available dates
-        available_dates = get_available_dates_via_js(driver, facility_id="134", expedite="false")
+        available_dates = get_available_dates_via_http(driver, facility_id="134", expedite="false")
         
         if available_dates == 'SESSION_EXPIRED':
             return 'SESSION_EXPIRED'
@@ -353,10 +353,77 @@ def send_html_to_telegram(driver, filename="page.html"):
         log_warning(f"⚠️ Failed to send HTML: {response.text}")
 
 
+def get_available_dates_via_http(driver, facility_id="134", expedite="false"):
+    """
+    Makes API call using Python requests library with cookies from Selenium session.
+    This extracts cookies from the browser session and makes a direct HTTP request.
+    
+    Args:
+        driver: Selenium WebDriver instance with active session
+        facility_id: Facility ID (134 for Astana, 135 for Almaty)
+        expedite: Whether to check for expedited appointments
+    
+    Returns:
+        dict/list: Response data, 'SESSION_EXPIRED' if 401, 'NETWORK_ERROR' if network issues, None if error
+    """
+    try:
+        # Extract cookies from Selenium driver
+        selenium_cookies = driver.get_cookies()
+        cookies_dict = {cookie['name']: cookie['value'] for cookie in selenium_cookies}
+        
+        # Build the URL
+        url = f'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment/days/{facility_id}.json?appointments[expedite]={expedite}'
+        
+        # Set up headers to match what the browser sends
+        headers = {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'X-Requested-With': 'XMLHttpRequest',
+            'User-Agent': driver.execute_script("return navigator.userAgent;"),
+            'Referer': 'https://ais.usvisa-info.com/en-kz/niv/schedule/70570056/appointment',
+            'Origin': 'https://ais.usvisa-info.com',
+        }
+        
+        # Make the GET request
+        response = requests.get(url, headers=headers, cookies=cookies_dict, timeout=30)
+        
+        # Log the response status
+        log_info(f"📊 API Response Status: {response.status_code}")
+        
+        # Handle 401 (session expired)
+        if response.status_code == 401:
+            return 'SESSION_EXPIRED'
+        
+        # Handle network errors (status 0 or connection errors)
+        if response.status_code == 0 or not response.ok:
+            if response.status_code == 0:
+                return 'NETWORK_ERROR'
+            log_error(f"❌ API request failed with status {response.status_code}")
+            return None
+        
+        # Parse JSON response
+        try:
+            response_data = response.json()
+            return response_data
+        except ValueError as e:
+            # If response is not JSON, log and return None
+            log_error(f"❌ Failed to parse JSON response: {e}")
+            log_error(f"Response text: {response.text[:200]}")
+            return None
+        
+    except requests.exceptions.RequestException as e:
+        # Network/connection errors
+        log_error(f"❌ Network error in get_available_dates_via_http: {e}")
+        return 'NETWORK_ERROR'
+    except Exception as e:
+        # Other errors
+        log_error(f"❌ get_available_dates_via_http exception: {e}")
+        return None
+
 def get_available_dates_via_js(driver, facility_id="134", expedite="false"):
     """
     Makes API call using JavaScript fetch in the browser context.
     This should work exactly like the UI does.
+    DEPRECATED: Use get_available_dates_via_http instead.
     """
     try:
         # Execute JavaScript to make the API call in the browser context

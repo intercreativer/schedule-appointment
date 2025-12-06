@@ -237,7 +237,7 @@ def check_appointments_loop(driver, session_start):
                 log_warning("🔐 Session expired (401), restarting...")
                 return False
             elif appointment_result == 'NETWORK_ERROR':
-                log_warning("🌐 Network error, retrying...")
+                # log_warning("🌐 Network error, retrying...")
                 consecutive_failures += 1
                 # if consecutive_failures >= max_consecutive_failures:
                 #     log_error("❌ Too many network errors, restarting session...")
@@ -388,6 +388,7 @@ def get_available_dates_via_http(driver, facility_id="134", expedite="false"):
         
         # Log the response status
         log_info(f"📊 API Response: {response.status_code} {response.text}")
+        # log_info(f"🔍 Checking appointments (session age: {session_age/60:.1f}min)")
         
         # Handle 401 (session expired)
         if response.status_code == 401:

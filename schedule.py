@@ -236,6 +236,9 @@ def check_appointments_loop(driver, session_start):
             if appointment_result == 'SESSION_EXPIRED':
                 log_warning("🔐 Session expired (401), restarting...")
                 return False
+            elif appointment_result == 'SESSION_INVALID':
+                log_warning("🔐 Session invalidated by browser closure, restarting session loop...")
+                return False
             elif appointment_result == 'NETWORK_ERROR':
                 # log_warning("🌐 Network error, retrying...")
                 consecutive_failures += 1
@@ -253,7 +256,11 @@ def check_appointments_loop(driver, session_start):
                 
         except Exception as e:
             consecutive_failures += 1
-            log_error(f"❌ Error checking appointments: {e}")
+            error_str = str(e)
+            log_error(f"❌ Error checking appointments: {error_str}")
+            if "invalid session id" in error_str.lower():
+                log_warning("🔐 Detected invalid session id during check, restarting session loop...")
+                return False
             
             # if consecutive_failures >= max_consecutive_failures:
             #     log_error("❌ Too many consecutive failures, restarting session...")
@@ -278,6 +285,8 @@ def check_appointments_only(driver):
             return 'SESSION_EXPIRED'
         if available_dates == 'NETWORK_ERROR':
             return 'NETWORK_ERROR'
+        if available_dates == 'SESSION_INVALID':
+            return 'SESSION_INVALID'
         
         if available_dates is not None and isinstance(available_dates, list) and len(available_dates) > 0:
             log_info(f"✅ Found {len(available_dates)} available date(s)")
@@ -330,7 +339,10 @@ def check_appointments_only(driver):
         return False
         
     except Exception as e:
-        log_error(f"❌ Error in check_appointments_only: {e}")
+        error_str = str(e)
+        log_error(f"❌ Error in check_appointments_only: {error_str}")
+        if "invalid session id" in error_str.lower():
+            return 'SESSION_INVALID'
         return False
 
 
@@ -417,7 +429,10 @@ def get_available_dates_via_http(driver, facility_id="134", expedite="false"):
         return 'NETWORK_ERROR'
     except Exception as e:
         # Other errors
-        log_error(f"❌ get_available_dates_via_http exception: {e}")
+        error_str = str(e)
+        log_error(f"❌ get_available_dates_via_http exception: {error_str}")
+        if "invalid session id" in error_str.lower():
+            return 'SESSION_INVALID'
         return None
 
 def get_available_dates_via_js(driver, facility_id="134", expedite="false"):

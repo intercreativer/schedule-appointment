@@ -214,7 +214,7 @@ def check_appointments_loop(driver, session_start):
     check_interval = 15  # Check every 30 seconds
     max_session_age = 60 * 60  # 60 minutes in seconds
     consecutive_failures = 0
-    # max_consecutive_failures = 3
+    max_consecutive_failures = 5
     
     while True:
         current_time = datetime.now()
@@ -242,9 +242,9 @@ def check_appointments_loop(driver, session_start):
             elif appointment_result == 'NETWORK_ERROR':
                 # log_warning("🌐 Network error, retrying...")
                 consecutive_failures += 1
-                # if consecutive_failures >= max_consecutive_failures:
-                #     log_error("❌ Too many network errors, restarting session...")
-                #     return False
+                if consecutive_failures >= max_consecutive_failures:
+                    log_error("❌ Too many network errors, restarting session...")
+                    return False
             elif appointment_result == True:
                 # Appointment was scheduled successfully
                 log_info("🎉 Appointment scheduled successfully!")

@@ -135,7 +135,9 @@ def main_persistent_session():
                 ok_button.click()
                 log_info("✅ Clicked OK modal")
             except Exception:
-                log_info("ℹ️ No OK modal appeared, continuing...")
+                log_info("ℹ️ No OK modal appeared. Waiting before retrying...")
+                time.sleep(600)
+                continue
 
             # Login process
             email_input = wait.until(EC.presence_of_element_located((By.ID, "user_email")))

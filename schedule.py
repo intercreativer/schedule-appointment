@@ -181,9 +181,9 @@ def main_persistent_session():
                 log_error(f"❌ Session error: {main_message}")
                 
                 # Check if it's a connection error that needs a delay
-                if "ERR_CONNECTION_REFUSED" in main_message or "ERR_CONNECTION_RESET" in main_message or "timeout" in main_message.lower():
-                    log_info("⏳ Connection error detected, waiting 5 minutes before retry...")
-                    time.sleep(300)  # Wait 5 minutes before retrying
+                if "ERR_CONNECTION_REFUSED" in main_message or "ERR_CONNECTION_RESET" in main_message or "ERR_CONNECTION_CLOSED" in main_message or "timeout" in main_message.lower():
+                    log_info("⏳ Connection error detected, waiting 1 hour before retry...")
+                    time.sleep(3600)  # Wait 1 hour before retrying
             else:
                 log_error(f"❌ Session error: {error_message}")
                 
@@ -281,7 +281,9 @@ def check_appointments_only(driver):
     """
     try:
         # Get available dates
-        available_dates = get_available_dates_via_http(driver, facility_id="134", expedite="false")
+        # available_dates = get_available_dates_via_http(driver, facility_id="134", expedite="false")
+        available_dates = get_available_dates_via_js(driver, facility_id="134", expedite="false")
+        
         
         if available_dates == 'SESSION_EXPIRED':
             return 'SESSION_EXPIRED'
